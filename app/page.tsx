@@ -5,11 +5,14 @@ import MediaCapture from '@/components/MediaCapture';
 import InsightsDashboard from '@/components/InsightsDashboard';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useWebSpeechAPI } from '@/hooks/useWebSpeechAPI';
+import { useAIInsights } from '@/hooks/useAIInsights';
 
 interface Transcription {
   text: string;
   timestamp: number;
   confidence?: number;
+  language?: string;
+  detectedLanguage?: string;
 }
 
 interface VideoAnalysis {
@@ -23,6 +26,12 @@ export default function Home() {
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
   const [videoAnalyses, setVideoAnalyses] = useState<VideoAnalysis[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [aiInsights, setAIInsights] = useState<{
+    sentiment?: any;
+    keywords?: any;
+    speechCoach?: any;
+    translation?: any;
+  }>({});
 
   // WebSocket connection to server (for video only now)
   const { isConnected, sendVideoFrame, messages } = useWebSocket('ws://localhost:4000');
@@ -34,8 +43,21 @@ export default function Home() {
     stopListening,
     isSupported,
     error: speechError,
-    results: speechResults
-  } = useWebSpeechAPI();  // Debug state tracking
+    results: speechResults,
+    currentLanguage,
+    setLanguage,
+    supportedLanguages
+  } = useWebSpeechAPI();
+
+  // AI Insights for sentiment, keywords, etc.
+  const {
+    analyzeSentiment,
+    extractKeywords,
+    analyzeSpeech,
+    translateText,
+    isLoading: aiLoading,
+    error: aiError
+  } = useAIInsights();  // Debug state tracking
   useEffect(() => {
     console.log('🔄 App state update:', {
       transcriptionsCount: transcriptions.length,
@@ -44,21 +66,26 @@ export default function Home() {
       isCapturing,
       isListening,
       speechSupported: isSupported,
-      messagesCount: messages.length
+      messagesCount: messages.length,
+      aiInsightsKeys: Object.keys(aiInsights),
+      hasAIInsights: Object.keys(aiInsights).length > 0
     });
-  }, [transcriptions, videoAnalyses, isConnected, isCapturing, isListening, isSupported, messages]);
+  }, [transcriptions, videoAnalyses, isConnected, isCapturing, isListening, isSupported, messages, aiInsights]);
 
-  // Handle speech recognition results
+  // Handle speech recognition results with AI analysis
   useEffect(() => {
-    speechResults.forEach(result => {
+    speechResults.forEach(async result => {
       if (result.isFinal) {
         console.log('🎤 Final transcription:', result);
 
+        // Add transcription to state
         setTranscriptions(prev => {
           const newTranscription = {
             text: result.text.trim(),
             timestamp: result.timestamp,
-            confidence: result.confidence
+            confidence: result.confidence,
+            language: result.language,
+            detectedLanguage: result.detectedLanguage
           };
 
           // Avoid duplicates
@@ -69,6 +96,12 @@ export default function Home() {
 
           if (!exists) {
             console.log('🎤 Adding new transcription to state');
+
+            // Trigger AI analysis for meaningful text
+            if (result.text.trim().length > 5) {  // Reduced from 20 for testing
+              performAIAnalysis(result.text.trim(), result.language);
+            }
+
             return [...prev, newTranscription];
           }
 
@@ -77,6 +110,49 @@ export default function Home() {
       }
     });
   }, [speechResults]);
+
+  // Perform AI analysis on transcribed text
+  const performAIAnalysis = useCallback(async (text: string, language: string) => {
+    try {
+      console.log('🤖 Starting AI analysis for:', text.substring(0, 50) + '...');
+
+      // Run sentiment analysis and keyword extraction in parallel
+      const [sentiment, keywords] = await Promise.all([
+        analyzeSentiment(text, language),
+        extractKeywords(text, language)
+      ]);
+
+      if (sentiment) {
+        console.log('💭 Sentiment analysis:', sentiment);
+        setAIInsights(prev => {
+          const newInsights = { ...prev, sentiment };
+          console.log('💭 Updated AI insights with sentiment:', newInsights);
+          return newInsights;
+        });
+      }
+
+      if (keywords) {
+        console.log('🔑 Keywords extracted:', keywords);
+        setAIInsights(prev => {
+          const newInsights = { ...prev, keywords };
+          console.log('🔑 Updated AI insights with keywords:', newInsights);
+          return newInsights;
+        });
+      }
+
+      // If not English, also provide translation
+      if (language.startsWith('es')) {
+        const translation = await translateText(text, language, 'en-US');
+        if (translation) {
+          console.log('🌐 Translation:', translation);
+          setAIInsights(prev => ({ ...prev, translation }));
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ AI analysis error:', error);
+    }
+  }, [analyzeSentiment, extractKeywords, translateText]);
 
   // Handle incoming WebSocket messages
   useEffect(() => {
@@ -176,6 +252,23 @@ export default function Home() {
               <span>Real-time Processing</span>
             </div>
           </div>
+
+          {/* Language Selector */}
+          <div className="flex items-center justify-center gap-4 mt-6 pt-4 border-t border-gray-200">
+            <span className="text-sm font-medium text-gray-700">Speech Language:</span>
+            <select
+              value={currentLanguage}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="en-US">🇺🇸 English (US)</option>
+              <option value="es-ES">🇪🇸 Español (España)</option>
+              <option value="es-MX">🇲🇽 Español (México)</option>
+            </select>
+            <span className="text-xs text-gray-500">
+              Current: {currentLanguage === 'en-US' ? 'English' : 'Spanish'}
+            </span>
+          </div>
         </div>
 
         {/* Media Capture Section */}
@@ -202,6 +295,8 @@ export default function Home() {
             transcriptions={transcriptions}
             videoAnalyses={videoAnalyses}
             isConnected={isConnected}
+            aiInsights={aiInsights}
+            aiLoading={aiLoading}
           />
         </div>
       </div>
