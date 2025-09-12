@@ -33,11 +33,7 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
 
       // Request camera and microphone access
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        },
+        video: true,
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
