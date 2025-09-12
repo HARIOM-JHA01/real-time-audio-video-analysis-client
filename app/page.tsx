@@ -77,7 +77,7 @@ export default function Home() {
   }>({});
 
   // WebSocket connection to server (for video only now)
-  const { isConnected, sendVideoFrame, messages } = useWebSocket('ws://localhost:4000');
+  const { isConnected, sendVideoFrame, messages } = useWebSocket('wss://projects.aux-rolplay.com/real-time-audio-video-analysis');
 
   // Web Speech API for transcription
   const {
