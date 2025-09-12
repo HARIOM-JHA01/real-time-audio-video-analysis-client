@@ -76,8 +76,29 @@ export default function Home() {
     translation?: TranslationResult;
   }>({});
 
+  // Smart WebSocket URL selection
+  const getWebSocketUrl = () => {
+    const isLocalDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+
+    // For now, prioritize local development server since remote server seems down
+    if (isLocalDev) {
+      if (isHttps) {
+        return 'wss://localhost:4000'; // Try secure local first
+      } else {
+        return 'ws://localhost:4000'; // Insecure local for HTTP
+      }
+    } else if (isHttps) {
+      // Production HTTPS - use secure WebSocket with correct Nginx path
+      return 'wss://projects.aux-rolplay.com/real-time-audio-video-analysis/';
+    } else {
+      // Fallback for other cases
+      return 'wss://projects.aux-rolplay.com/real-time-audio-video-analysis/';
+    }
+  };
+
   // WebSocket connection to server (for video only now)
-  const { isConnected, sendVideoFrame, messages } = useWebSocket('wss://projects.aux-rolplay.com/real-time-audio-video-analysis');
+  const { isConnected, sendVideoFrame, messages } = useWebSocket(getWebSocketUrl());
 
   // Web Speech API for transcription
   const {
