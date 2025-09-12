@@ -41,8 +41,7 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 44100
+          autoGainControl: true
         }
       });
 
