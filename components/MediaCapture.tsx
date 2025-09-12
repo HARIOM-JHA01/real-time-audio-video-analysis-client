@@ -5,15 +5,18 @@ import { useEffect, useRef, useState } from 'react';
 interface MediaCaptureProps {
   onAudioData?: (audioData: Blob) => void;
   onVideoFrame?: (frame: string) => void;
+  onStartCapture?: () => void;
+  onStopCapture?: () => void;
 }
 
-export default function MediaCapture({ onAudioData, onVideoFrame }: MediaCaptureProps) {
+export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture, onStopCapture }: MediaCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioCanvasRef = useRef<HTMLCanvasElement>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const frameIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioChunkTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,23 +55,86 @@ export default function MediaCapture({ onAudioData, onVideoFrame }: MediaCapture
         videoRef.current.play();
       }
 
-      // Set up audio recording
+      // Set up audio recording with more robust approach
+      console.log('🎙️ Setting up MediaRecorder');
+
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/webm';
+        console.log('🎙️ Falling back to audio/webm');
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'audio/wav';
+          console.log('🎙️ Falling back to audio/wav');
+        }
+      }
+
+      console.log('🎙️ Using MIME type:', mimeType);
+
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus',
+        mimeType: mimeType,
         audioBitsPerSecond: 128000
       });
 
       mediaRecorderRef.current = mediaRecorder;
 
-      // Send audio data in chunks
+      console.log('🎙️ MediaRecorder state:', mediaRecorder.state);
+
+      // Collect audio chunks over time instead of relying on timeslice
+      let audioChunks: Blob[] = [];
+
+      const sendCollectedAudio = () => {
+        if (audioChunks.length > 0) {
+          const combinedBlob = new Blob(audioChunks, { type: mimeType });
+          console.log('🎙️ Sending combined audio blob. Total chunks:', audioChunks.length, 'Combined size:', combinedBlob.size, 'bytes');
+
+          if (combinedBlob.size > 1000 && onAudioData) {
+            console.log('🎙️ Calling onAudioData with combined blob size:', combinedBlob.size);
+            onAudioData(combinedBlob);
+          } else {
+            console.log('🎙️ Combined blob too small for Whisper:', combinedBlob.size, 'bytes');
+          }
+
+          audioChunks = []; // Reset chunks
+        }
+      };      // Send audio data in chunks
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && onAudioData) {
-          onAudioData(event.data);
+        console.log('🎙️ MediaRecorder data available. Size:', event.data.size, 'bytes');
+        console.log('🎙️ Event data type:', event.data.type);
+
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+          console.log('🎙️ Added chunk to collection. Total chunks:', audioChunks.length);
         }
       };
 
-      // Start recording audio in 250ms chunks for real-time processing
-      mediaRecorder.start(250);
+      mediaRecorder.onstart = () => {
+        console.log('🎙️ MediaRecorder started successfully');
+
+        // Set up timer to send audio every 5 seconds
+        audioChunkTimerRef.current = setInterval(() => {
+          console.log('🎙️ Timer triggered - collecting audio chunks');
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            sendCollectedAudio();
+          }
+        }, 5000);
+      };
+
+      mediaRecorder.onstop = () => {
+        console.log('🎙️ MediaRecorder stopped');
+        if (audioChunkTimerRef.current) {
+          clearInterval(audioChunkTimerRef.current);
+          audioChunkTimerRef.current = null;
+        }
+        sendCollectedAudio(); // Send any remaining chunks
+      };
+
+      mediaRecorder.onerror = (event) => {
+        console.error('🎙️ MediaRecorder error:', event);
+      };
+
+      // Start recording continuously (no timeslice parameter)
+      console.log('🎙️ Starting MediaRecorder in continuous mode');
+      mediaRecorder.start();
 
       // Set up audio visualization
       setupAudioVisualization(stream);
@@ -77,6 +143,11 @@ export default function MediaCapture({ onAudioData, onVideoFrame }: MediaCapture
       startFrameCapture();
 
       setIsStreaming(true);
+
+      // Call the parent callback to start speech recognition
+      if (onStartCapture) {
+        onStartCapture();
+      }
     } catch (err) {
       console.error('Error accessing media devices:', err);
       setError('Failed to access camera and microphone. Please grant permissions and try again.');
@@ -185,6 +256,11 @@ export default function MediaCapture({ onAudioData, onVideoFrame }: MediaCapture
       clearInterval(frameIntervalRef.current);
     }
 
+    if (audioChunkTimerRef.current) {
+      clearInterval(audioChunkTimerRef.current);
+      audioChunkTimerRef.current = null;
+    }
+
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
     }
@@ -194,6 +270,11 @@ export default function MediaCapture({ onAudioData, onVideoFrame }: MediaCapture
     }
 
     setIsStreaming(false);
+
+    // Call the parent callback to stop speech recognition
+    if (onStopCapture) {
+      onStopCapture();
+    }
   };
 
   useEffect(() => {
@@ -210,16 +291,16 @@ export default function MediaCapture({ onAudioData, onVideoFrame }: MediaCapture
             onClick={isStreaming ? stopMediaCapture : startMediaCapture}
             disabled={permissionStatus === 'denied'}
             className={`px-8 py-3 rounded-xl font-semibold transition-all duration-200 ${isStreaming
-                ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg hover:shadow-red-500/25'
-                : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg hover:shadow-green-500/25'
+              ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg hover:shadow-red-500/25'
+              : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg hover:shadow-green-500/25'
               } disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none`}
           >
             {isStreaming ? '⏹️ Stop Capture' : '▶️ Start Capture'}
           </button>
 
           <div className={`px-4 py-2 rounded-full text-sm font-medium ${permissionStatus === 'granted' ? 'bg-green-100 text-green-800 border border-green-200' :
-              permissionStatus === 'denied' ? 'bg-red-100 text-red-800 border border-red-200' :
-                'bg-yellow-100 text-yellow-800 border border-yellow-200'
+            permissionStatus === 'denied' ? 'bg-red-100 text-red-800 border border-red-200' :
+              'bg-yellow-100 text-yellow-800 border border-yellow-200'
             }`}>
             {permissionStatus === 'granted' ? '✅ Permissions Granted' :
               permissionStatus === 'denied' ? '❌ Permissions Denied' :

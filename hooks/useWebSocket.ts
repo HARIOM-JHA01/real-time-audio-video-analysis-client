@@ -38,11 +38,16 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 };
 
                 ws.onmessage = (event) => {
+                    console.log('🔌 Raw WebSocket message received:', event.data);
                     try {
                         const message: WebSocketMessage = JSON.parse(event.data);
-                        setMessages(prev => [...prev, message]);
+                        console.log('🔌 Parsed WebSocket message:', message);
+                        setMessages(prev => {
+                            console.log('🔌 Adding message to state. Previous count:', prev.length);
+                            return [...prev, message];
+                        });
                     } catch (err) {
-                        console.error('Failed to parse WebSocket message:', err);
+                        console.error('❌ Failed to parse WebSocket message:', err, 'Raw data:', event.data);
                     }
                 };
 
@@ -88,22 +93,36 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     };
 
     const sendAudioData = async (audioBlob: Blob) => {
+        console.log('🎤 Attempting to send audio data. Blob size:', audioBlob.size, 'bytes');
+        console.log('🎤 Audio blob type:', audioBlob.type);
+        console.log('🎤 WebSocket ready state:', wsRef.current?.readyState);
+
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             // Convert blob to base64 for transmission
             const reader = new FileReader();
             reader.onload = () => {
                 const base64Data = reader.result as string;
-                sendMessage({
+                const audioMessage = {
                     type: 'audio',
                     data: base64Data.split(',')[1], // Remove data:audio/webm;base64, prefix
+                    mimeType: audioBlob.type, // Include MIME type for better Whisper processing
                     timestamp: Date.now()
+                };
+
+                console.log('🎤 Sending audio message:', {
+                    type: audioMessage.type,
+                    dataLength: audioMessage.data.length,
+                    mimeType: audioMessage.mimeType,
+                    timestamp: audioMessage.timestamp
                 });
+
+                sendMessage(audioMessage);
             };
             reader.readAsDataURL(audioBlob);
+        } else {
+            console.warn('❌ Cannot send audio data - WebSocket is not connected. State:', wsRef.current?.readyState);
         }
-    };
-
-    const sendVideoFrame = (frameData: string) => {
+    }; const sendVideoFrame = (frameData: string) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             sendMessage({
                 type: 'video-frame',
