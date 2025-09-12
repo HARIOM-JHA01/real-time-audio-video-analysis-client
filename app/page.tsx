@@ -22,15 +22,58 @@ interface VideoAnalysis {
   scene?: string;
 }
 
+interface SentimentResult {
+  sentiment: 'positive' | 'negative' | 'neutral';
+  confidence: number;
+  emotions: string[];
+  reasoning: string;
+}
+
+interface KeywordResult {
+  keywords: string[];
+  categories: {
+    business: string[];
+    time: string[];
+    emotions: string[];
+    actions: string[];
+  };
+  urgency: 'low' | 'medium' | 'high';
+}
+
+interface TranslationResult {
+  originalText: string;
+  translatedText: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  confidence: number;
+}
+
+interface SpeechCoachResult {
+  fillerWords: {
+    count: number;
+    words: string[];
+    percentage: number;
+  };
+  speakingPace: {
+    wordsPerMinute: number;
+    assessment: 'too slow' | 'good' | 'too fast';
+  };
+  confidence: {
+    level: 'low' | 'medium' | 'high';
+    indicators: string[];
+  };
+  feedback: string[];
+}
+
 export default function Home() {
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
   const [videoAnalyses, setVideoAnalyses] = useState<VideoAnalysis[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
   const [aiInsights, setAIInsights] = useState<{
-    sentiment?: any;
-    keywords?: any;
-    speechCoach?: any;
-    translation?: any;
+    sentiment?: SentimentResult;
+    keywords?: KeywordResult;
+    speechCoach?: SpeechCoachResult;
+    translation?: TranslationResult;
   }>({});
 
   // WebSocket connection to server (for video only now)
@@ -42,21 +85,17 @@ export default function Home() {
     startListening,
     stopListening,
     isSupported,
-    error: speechError,
     results: speechResults,
     currentLanguage,
-    setLanguage,
-    supportedLanguages
+    setLanguage
   } = useWebSpeechAPI();
 
   // AI Insights for sentiment, keywords, etc.
   const {
     analyzeSentiment,
     extractKeywords,
-    analyzeSpeech,
     translateText,
-    isLoading: aiLoading,
-    error: aiError
+    isLoading: aiLoading
   } = useAIInsights();  // Debug state tracking
   useEffect(() => {
     console.log('🔄 App state update:', {
@@ -71,45 +110,6 @@ export default function Home() {
       hasAIInsights: Object.keys(aiInsights).length > 0
     });
   }, [transcriptions, videoAnalyses, isConnected, isCapturing, isListening, isSupported, messages, aiInsights]);
-
-  // Handle speech recognition results with AI analysis
-  useEffect(() => {
-    speechResults.forEach(async result => {
-      if (result.isFinal) {
-        console.log('🎤 Final transcription:', result);
-
-        // Add transcription to state
-        setTranscriptions(prev => {
-          const newTranscription = {
-            text: result.text.trim(),
-            timestamp: result.timestamp,
-            confidence: result.confidence,
-            language: result.language,
-            detectedLanguage: result.detectedLanguage
-          };
-
-          // Avoid duplicates
-          const exists = prev.some(t =>
-            t.text === newTranscription.text &&
-            Math.abs(t.timestamp - newTranscription.timestamp) < 1000
-          );
-
-          if (!exists) {
-            console.log('🎤 Adding new transcription to state');
-
-            // Trigger AI analysis for meaningful text
-            if (result.text.trim().length > 5) {  // Reduced from 20 for testing
-              performAIAnalysis(result.text.trim(), result.language);
-            }
-
-            return [...prev, newTranscription];
-          }
-
-          return prev;
-        });
-      }
-    });
-  }, [speechResults]);
 
   // Perform AI analysis on transcribed text
   const performAIAnalysis = useCallback(async (text: string, language: string) => {
@@ -153,6 +153,45 @@ export default function Home() {
       console.error('❌ AI analysis error:', error);
     }
   }, [analyzeSentiment, extractKeywords, translateText]);
+
+  // Handle speech recognition results with AI analysis
+  useEffect(() => {
+    speechResults.forEach(async result => {
+      if (result.isFinal) {
+        console.log('🎤 Final transcription:', result);
+
+        // Add transcription to state
+        setTranscriptions(prev => {
+          const newTranscription = {
+            text: result.text.trim(),
+            timestamp: result.timestamp,
+            confidence: result.confidence,
+            language: result.language,
+            detectedLanguage: result.detectedLanguage
+          };
+
+          // Avoid duplicates
+          const exists = prev.some(t =>
+            t.text === newTranscription.text &&
+            Math.abs(t.timestamp - newTranscription.timestamp) < 1000
+          );
+
+          if (!exists) {
+            console.log('🎤 Adding new transcription to state');
+
+            // Trigger AI analysis for meaningful text
+            if (result.text.trim().length > 5) {  // Reduced from 20 for testing
+              performAIAnalysis(result.text.trim(), result.language);
+            }
+
+            return [...prev, newTranscription];
+          }
+
+          return prev;
+        });
+      }
+    });
+  }, [speechResults, performAIAnalysis]);
 
   // Handle incoming WebSocket messages
   useEffect(() => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 interface MediaCaptureProps {
   onAudioData?: (audioData: Blob) => void;
@@ -243,7 +243,7 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
     onVideoFrame(frameData);
   };
 
-  const stopMediaCapture = () => {
+  const stopMediaCapture = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
@@ -275,13 +275,13 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
     if (onStopCapture) {
       onStopCapture();
     }
-  };
+  }, [onStopCapture]);
 
   useEffect(() => {
     return () => {
       stopMediaCapture();
     };
-  }, []);
+  }, [stopMediaCapture]);
 
   return (
     <div className="space-y-6">
