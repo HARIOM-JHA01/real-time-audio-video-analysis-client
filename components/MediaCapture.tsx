@@ -10,159 +10,142 @@ interface MediaCaptureProps {
 }
 
 export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture, onStopCapture }: MediaCaptureProps) {
-  // Enumerate devices on mount for debugging
   useEffect(() => {
     navigator.mediaDevices.enumerateDevices()
-      .then(devices => {
-        console.log('Available media devices:', devices);
-      })
-      .catch(err => {
-        console.error('Error enumerating devices:', err);
-      });
+      .then(devices => console.log('Available media devices:', devices))
+      .catch(err => console.error('Error enumerating devices:', err));
   }, []);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioCanvasRef = useRef<HTMLCanvasElement>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const frameIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const audioChunkTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const frameIntervalRef = useRef<number | null>(null);
+  const audioChunkTimerRef = useRef<number | null>(null);
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<'pending' | 'granted' | 'denied'>('pending');
 
-  // Audio visualization
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
 
-  const startMediaCapture = async () => {
+  const checkPermissions = async () => {
     try {
-      setError(null);
-
-      // List available devices before requesting
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      console.log('Enumerated devices before getUserMedia:', devices);
-      const videoDevice = devices.find(d => d.kind === 'videoinput');
-      const audioDevice = devices.find(d => d.kind === 'audioinput');
-
-      // Request camera and microphone access (try specific device if available)
-      const constraints = {
-        video: videoDevice ? { deviceId: videoDevice.deviceId } : true,
-        audio: audioDevice ? { deviceId: audioDevice.deviceId } : true
-      };
-      console.log('Requesting getUserMedia with constraints:', constraints);
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-      streamRef.current = stream;
-      setPermissionStatus('granted');
-
-      // Display video in the video element
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
+      if ((navigator as any).permissions && (navigator as any).permissions.query) {
+        const cam = await (navigator as any).permissions.query({ name: 'camera' });
+        const mic = await (navigator as any).permissions.query({ name: 'microphone' });
+        if (cam.state === 'denied' || mic.state === 'denied') {
+          setPermissionStatus('denied');
+        } else if (cam.state === 'granted' && mic.state === 'granted') {
+          setPermissionStatus('granted');
+        } else {
+          setPermissionStatus('pending');
+        }
       }
+    } catch (e) { }
+  };
 
-      // Set up audio recording with more robust approach
-      console.log('🎙️ Setting up MediaRecorder');
+  useEffect(() => {
+    checkPermissions();
+  }, []);
 
+  const startMediaCapture = async () => {
+    setError(null);
+    if (!window.isSecureContext && location.hostname !== 'localhost') {
+      setError('getUserMedia requires a secure context (HTTPS). Use https or localhost.');
+      setPermissionStatus('denied');
+      return;
+    }
+    try {
+      console.log('Requesting simple getUserMedia({audio: true, video: true}) to prompt permissions');
+      const initialStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      streamRef.current = initialStream;
+      setPermissionStatus('granted');
+      if (videoRef.current) {
+        videoRef.current.srcObject = initialStream;
+        videoRef.current.play().catch(() => { });
+      }
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      console.log('Devices after permission:', devices);
+      const videoDevice = devices.find(d => d.kind === 'videoinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== '');
+      const audioDevice = devices.find(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== '');
+      let finalStream: MediaStream | null = initialStream;
+      if (videoDevice || audioDevice) {
+        const constraints: any = {};
+        constraints.video = videoDevice ? { deviceId: { exact: videoDevice.deviceId } } : true;
+        constraints.audio = audioDevice ? { deviceId: { exact: audioDevice.deviceId } } : true;
+        try {
+          console.log('Requesting pinned devices with constraints:', constraints);
+          const pinned = await navigator.mediaDevices.getUserMedia(constraints);
+          finalStream = pinned;
+          if (initialStream !== pinned) {
+            initialStream.getTracks().forEach(t => t.stop());
+          }
+        } catch (err) {
+          console.warn('Pinned device getUserMedia failed; continuing with initialStream', err);
+        }
+      }
+      streamRef.current = finalStream;
       let mimeType = 'audio/webm;codecs=opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = 'audio/webm';
-        console.log('🎙️ Falling back to audio/webm');
         if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'audio/wav';
-          console.log('🎙️ Falling back to audio/wav');
+          mimeType = '';
         }
       }
-
-      console.log('🎙️ Using MIME type:', mimeType);
-
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: mimeType,
-        audioBitsPerSecond: 128000
-      });
-
+      console.log('Using mimeType for recorder:', mimeType || 'default');
+      const mediaRecorder = mimeType ? new MediaRecorder(finalStream!, { mimeType, audioBitsPerSecond: 128000 }) : new MediaRecorder(finalStream!);
       mediaRecorderRef.current = mediaRecorder;
-
-      console.log('🎙️ MediaRecorder state:', mediaRecorder.state);
-
-      // Collect audio chunks over time instead of relying on timeslice
       let audioChunks: Blob[] = [];
-
       const sendCollectedAudio = () => {
         if (audioChunks.length > 0) {
-          const combinedBlob = new Blob(audioChunks, { type: mimeType });
-          console.log('🎙️ Sending combined audio blob. Total chunks:', audioChunks.length, 'Combined size:', combinedBlob.size, 'bytes');
-
-          if (combinedBlob.size > 1000 && onAudioData) {
-            console.log('🎙️ Calling onAudioData with combined blob size:', combinedBlob.size);
-            onAudioData(combinedBlob);
-          } else {
-            console.log('🎙️ Combined blob too small for Whisper:', combinedBlob.size, 'bytes');
-          }
-
-          audioChunks = []; // Reset chunks
-        }
-      };      // Send audio data in chunks
-      mediaRecorder.ondataavailable = (event) => {
-        console.log('🎙️ MediaRecorder data available. Size:', event.data.size, 'bytes');
-        console.log('🎙️ Event data type:', event.data.type);
-
-        if (event.data.size > 0) {
-          audioChunks.push(event.data);
-          console.log('🎙️ Added chunk to collection. Total chunks:', audioChunks.length);
+          const combinedBlob = new Blob(audioChunks, { type: mimeType || audioChunks[0]?.type || 'audio/webm' });
+          console.log('Sending combined blob size:', combinedBlob.size);
+          if (combinedBlob.size > 1000 && onAudioData) onAudioData(combinedBlob);
+          audioChunks = [];
         }
       };
-
+      mediaRecorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
       mediaRecorder.onstart = () => {
-        console.log('🎙️ MediaRecorder started successfully');
-
-        // Set up timer to send audio every 5 seconds
-        audioChunkTimerRef.current = setInterval(() => {
-          console.log('🎙️ Timer triggered - collecting audio chunks');
+        audioChunkTimerRef.current = window.setInterval(() => {
           if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
             sendCollectedAudio();
           }
         }, 5000);
       };
-
       mediaRecorder.onstop = () => {
-        console.log('🎙️ MediaRecorder stopped');
         if (audioChunkTimerRef.current) {
           clearInterval(audioChunkTimerRef.current);
           audioChunkTimerRef.current = null;
         }
-        sendCollectedAudio(); // Send any remaining chunks
+        sendCollectedAudio();
       };
-
-      mediaRecorder.onerror = (event) => {
-        console.error('🎙️ MediaRecorder error:', event);
-      };
-
-      // Start recording continuously (no timeslice parameter)
-      console.log('🎙️ Starting MediaRecorder in continuous mode');
+      mediaRecorder.onerror = (ev) => console.error('MediaRecorder error', ev);
       mediaRecorder.start();
-
-      // Set up audio visualization
-      setupAudioVisualization(stream);
-
-      // Start video frame capture
-      startFrameCapture();
-
-      setIsStreaming(true);
-
-      // Call the parent callback to start speech recognition
-      if (onStartCapture) {
-        onStartCapture();
+      setupAudioVisualization(finalStream!);
+      if (videoRef.current && finalStream) {
+        videoRef.current.srcObject = finalStream;
+        videoRef.current.play().catch(() => { });
       }
-    } catch (err) {
-      if (err instanceof DOMException) {
-        console.error('Error accessing media devices:', err.name, err.message);
-        setError(`Failed to access camera and microphone. (${err.name}: ${err.message})`);
+      startFrameCapture();
+      setIsStreaming(true);
+      if (onStartCapture) onStartCapture();
+    } catch (err: any) {
+      console.error('Failed to start capture:', err);
+      if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+        setError('Permission denied. Check Chrome site settings (Camera / Microphone) or use HTTPS / localhost.');
+      } else if (err && err.name === 'NotFoundError') {
+        setError('No camera/microphone found. Please connect a device.');
+      } else if (err && err.name === 'OverconstrainedError') {
+        setError('Requested device not found. Try allowing default devices or check connected devices.');
       } else {
-        console.error('Error accessing media devices:', err);
         setError('Failed to access camera and microphone. Please grant permissions and try again.');
       }
       setPermissionStatus('denied');
@@ -170,89 +153,68 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
   };
 
   const setupAudioVisualization = (stream: MediaStream) => {
-    const AudioCtx = window.AudioContext || (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) {
       console.warn('Web Audio API not supported');
       return;
     }
-
-    const audioContext = new AudioCtx();
+    let audioContext = audioContextRef.current;
+    if (!audioContext) {
+      audioContext = new AudioCtx() as AudioContext;
+      audioContextRef.current = audioContext;
+    }
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => { });
+    }
     const analyser = audioContext.createAnalyser();
-    const microphone = audioContext.createMediaStreamSource(stream);
-
     analyser.fftSize = 256;
+    const microphone = audioContext.createMediaStreamSource(stream);
     microphone.connect(analyser);
-
-    audioContextRef.current = audioContext;
     analyserRef.current = analyser;
-
     drawAudioVisualization();
   };
 
   const drawAudioVisualization = () => {
     if (!audioCanvasRef.current || !analyserRef.current) return;
-
     const canvas = audioCanvasRef.current;
     const ctx = canvas.getContext('2d');
     const analyser = analyserRef.current;
-
     if (!ctx) return;
-
-    // Create frequency data array
     const frequencyData = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteFrequencyData(frequencyData);
-
     ctx.fillStyle = 'rgb(15, 23, 42)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     const barWidth = (canvas.width / frequencyData.length) * 2.5;
-    let barHeight;
     let x = 0;
-
     for (let i = 0; i < frequencyData.length; i++) {
-      barHeight = (frequencyData[i] / 255) * canvas.height;
-
-      // Create gradient effect
+      const barHeight = (frequencyData[i] / 255) * canvas.height;
       const gradient = ctx.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
       gradient.addColorStop(0, '#3b82f6');
       gradient.addColorStop(0.5, '#60a5fa');
       gradient.addColorStop(1, '#93c5fd');
-
       ctx.fillStyle = gradient;
       ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-
       x += barWidth + 1;
     }
-
     animationRef.current = requestAnimationFrame(drawAudioVisualization);
   };
 
   const startFrameCapture = () => {
     if (!captureCanvasRef.current || !videoRef.current) return;
-
-    // Capture a frame every 3 seconds for GPT-4o analysis
-    frameIntervalRef.current = setInterval(() => {
+    frameIntervalRef.current = window.setInterval(() => {
       captureFrame();
     }, 3000);
   };
 
   const captureFrame = () => {
     if (!captureCanvasRef.current || !videoRef.current || !onVideoFrame) return;
-
     const canvas = captureCanvasRef.current;
     const video = videoRef.current;
     const ctx = canvas.getContext('2d');
-
     if (!ctx) return;
-
-    // Set canvas size to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    // Draw current video frame to canvas
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // Convert to base64 image
     const frameData = canvas.toDataURL('image/jpeg', 0.8);
     onVideoFrame(frameData);
   };
@@ -260,35 +222,31 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
   const stopMediaCapture = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
-
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
     }
-
     if (frameIntervalRef.current) {
       clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
     }
-
     if (audioChunkTimerRef.current) {
       clearInterval(audioChunkTimerRef.current);
       audioChunkTimerRef.current = null;
     }
-
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
     }
-
     if (audioContextRef.current) {
-      audioContextRef.current.close();
+      audioContextRef.current.close().catch(() => { });
+      audioContextRef.current = null;
+      analyserRef.current = null;
     }
-
     setIsStreaming(false);
-
-    // Call the parent callback to stop speech recognition
-    if (onStopCapture) {
-      onStopCapture();
-    }
+    if (onStopCapture) onStopCapture();
   }, [onStopCapture]);
 
   useEffect(() => {
@@ -311,7 +269,6 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
           >
             {isStreaming ? '⏹️ Stop Capture' : '▶️ Start Capture'}
           </button>
-
           <div className={`px-4 py-2 rounded-full text-sm font-medium ${permissionStatus === 'granted' ? 'bg-green-100 text-green-800 border border-green-200' :
             permissionStatus === 'denied' ? 'bg-red-100 text-red-800 border border-red-200' :
               'bg-yellow-100 text-yellow-800 border border-yellow-200'
@@ -321,7 +278,6 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
                 '⏳ Requesting Permissions...'}
           </div>
         </div>
-
         {isStreaming && (
           <div className="flex items-center gap-2 text-green-600">
             <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
@@ -329,7 +285,6 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
           </div>
         )}
       </div>
-
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-xl shadow-sm">
           <div className="flex items-center gap-2">
@@ -338,9 +293,7 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
           </div>
         </div>
       )}
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Video Preview */}
         <div className="bg-white rounded-xl p-6 shadow-sm border">
           <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
             🎥 Video Preview
@@ -363,8 +316,6 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
             )}
           </div>
         </div>
-
-        {/* Audio Visualization */}
         <div className="bg-white rounded-xl p-6 shadow-sm border">
           <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
             🎵 Audio Levels
@@ -387,12 +338,7 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
           </div>
         </div>
       </div>
-
-      {/* Hidden canvas for frame capture */}
-      <canvas
-        ref={captureCanvasRef}
-        style={{ display: 'none' }}
-      />
+      <canvas ref={captureCanvasRef} style={{ display: 'none' }} />
     </div>
   );
 }
