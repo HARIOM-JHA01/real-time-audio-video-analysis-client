@@ -59,10 +59,10 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
       if (onAudioData) {
         let mediaRecorder: MediaRecorder | null = null;
         let mimeType = '';
-        let workingConfig: any = null;
+        let workingConfig: { mimeType: string; options: MediaRecorderOptions } | null = null;
 
         // Try different configurations in order of preference
-        const configs = [
+        const configs: { mimeType: string; options: MediaRecorderOptions }[] = [
           { mimeType: '', options: {} }, // Default first (most compatible)
           { mimeType: 'audio/webm', options: {} },
           { mimeType: 'audio/mp4', options: {} },

@@ -25,16 +25,20 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     useEffect(() => {
         let reconnectTimeout: NodeJS.Timeout;
+        let retryCount = 0;
+        const maxRetries = 5;
 
         const connect = () => {
             try {
+                console.log(`🔌 Attempting to connect to WebSocket: ${url} (Retry ${retryCount}/${maxRetries})`);
                 const ws = new WebSocket(url);
                 wsRef.current = ws;
 
                 ws.onopen = () => {
-                    console.log('WebSocket connected');
+                    console.log('✅ WebSocket connected successfully');
                     setIsConnected(true);
                     setError(null);
+                    retryCount = 0; // Reset retry count on successful connection
                 };
 
                 ws.onmessage = (event) => {
@@ -51,23 +55,31 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                     }
                 };
 
-                ws.onclose = () => {
-                    console.log('WebSocket disconnected');
+                ws.onclose = (event) => {
+                    console.log('❌ WebSocket disconnected. Code:', event.code, 'Reason:', event.reason);
                     setIsConnected(false);
 
-                    // Attempt to reconnect after 3 seconds
-                    reconnectTimeout = setTimeout(() => {
-                        console.log('Attempting to reconnect...');
-                        connect();
-                    }, 3000);
+                    // Only attempt to reconnect if under retry limit and not manually closed
+                    if (retryCount < maxRetries && event.code !== 1000) {
+                        retryCount++;
+                        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff, max 10s
+                        console.log(`🔄 Attempting to reconnect in ${delay}ms (${retryCount}/${maxRetries})`);
+
+                        reconnectTimeout = setTimeout(() => {
+                            connect();
+                        }, delay);
+                    } else if (retryCount >= maxRetries) {
+                        console.error('❌ Max WebSocket reconnection attempts reached');
+                        setError('WebSocket connection failed after multiple attempts. Please check if the server is running.');
+                    }
                 };
 
                 ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                    setError('WebSocket connection failed');
+                    console.error('❌ WebSocket error:', error);
+                    setError('WebSocket connection failed. Make sure the server is running on the correct port.');
                 };
             } catch (err) {
-                console.error('Failed to create WebSocket connection:', err);
+                console.error('❌ Failed to create WebSocket connection:', err);
                 setError('Failed to create WebSocket connection');
             }
         };
@@ -78,8 +90,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             if (reconnectTimeout) {
                 clearTimeout(reconnectTimeout);
             }
-            if (wsRef.current) {
-                wsRef.current.close();
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.close(1000, 'Component unmounted'); // Normal closure
             }
         };
     }, [url]);
