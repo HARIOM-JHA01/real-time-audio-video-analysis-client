@@ -10,7 +10,9 @@ interface MediaCaptureProps {
 }
 
 export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture, onStopCapture }: MediaCaptureProps) {
+  // Removed complex permission checking - let getUserMedia handle it directly
   useEffect(() => {
+    // Simple device enumeration for logging (optional)
     navigator.mediaDevices.enumerateDevices()
       .then(devices => console.log('Available media devices:', devices))
       .catch(err => console.error('Error enumerating devices:', err));
@@ -33,166 +35,218 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
 
-  // Helper: read permission state if Permissions API available
-  const checkPermissions = async () => {
-    try {
-      const nav = navigator as Navigator & { permissions?: { query: (params: { name: string }) => Promise<{ state: 'granted' | 'denied' | 'prompt' }> } };
-      if (nav.permissions && nav.permissions.query) {
-        // camera and microphone permission names are "camera"/"microphone" in Chrome
-        const cam = await nav.permissions.query({ name: 'camera' });
-        const mic = await nav.permissions.query({ name: 'microphone' });
-        if (cam.state === 'denied' || mic.state === 'denied') {
-          setPermissionStatus('denied');
-        } else if (cam.state === 'granted' && mic.state === 'granted') {
-          setPermissionStatus('granted');
-        } else {
-          setPermissionStatus('pending');
-        }
-      }
-    } catch {
-      // Permissions API may not be present — keep 'pending' until we actually request
-    }
-  };
-
-  useEffect(() => {
-    checkPermissions();
-  }, []);
-
   const startMediaCapture = async () => {
     setError(null);
 
-    // Chrome requires secure context; guide user if not secure.
-    if (!window.isSecureContext && location.hostname !== 'localhost') {
-      setError('getUserMedia requires a secure context (HTTPS). Use https or localhost.');
-      setPermissionStatus('denied');
-      return;
-    }
-
     try {
-      // FIRST: request a simple permission prompt. This is the part Chrome expects.
-      console.log('Requesting simple getUserMedia({audio: true, video: true}) to prompt permissions');
-      const initialStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      // Simple, direct approach like your working vanilla JS
+      console.log('Requesting getUserMedia with simple constraints');
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
 
-      // Set basic stream and UI
-      streamRef.current = initialStream;
+      // Store the stream
+      streamRef.current = stream;
       setPermissionStatus('granted');
 
+      // Set up video element
       if (videoRef.current) {
-        videoRef.current.srcObject = initialStream;
-        // play may reject on some autoplay policies; catch it
-        videoRef.current.play().catch(() => { /* ignore autoplay rejection */ });
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(err => {
+          console.warn('Video autoplay failed:', err);
+        });
       }
 
-      // Now we can enumerate devices and, if desired, pick a specific device with exact constraint safely.
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      console.log('Devices after permission:", devices');
+      // Setup MediaRecorder for audio capture
+      if (onAudioData) {
+        let mediaRecorder: MediaRecorder | null = null;
+        let mimeType = '';
+        let workingConfig: any = null;
 
-      // pick first non-empty device id (optional)
-      const videoDevice = devices.find(d => d.kind === 'videoinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== '');
-      const audioDevice = devices.find(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== '');
+        // Try different configurations in order of preference
+        const configs = [
+          { mimeType: '', options: {} }, // Default first (most compatible)
+          { mimeType: 'audio/webm', options: {} },
+          { mimeType: 'audio/mp4', options: {} },
+          { mimeType: 'audio/ogg', options: {} },
+          { mimeType: 'audio/webm;codecs=opus', options: {} },
+        ];
 
-      // Build final constraints only if we want to pin a device — otherwise keep using the initialStream
-      let finalStream: MediaStream | null = initialStream;
-      if (videoDevice || audioDevice) {
-        // Build constraints with exact() only if we actually have non-empty ids
-        const constraints: MediaStreamConstraints = {
-          video: videoDevice ? { deviceId: { exact: videoDevice.deviceId } } : true,
-          audio: audioDevice ? { deviceId: { exact: audioDevice.deviceId } } : true
-        };
+        // Test each configuration by actually trying to start recording
+        for (const config of configs) {
+          try {
+            console.log('Testing MediaRecorder config:', config);
 
-        // Try to get final stream with device pinning (if this fails, fall back to initialStream)
-        try {
-          console.log('Requesting pinned devices with constraints:', constraints);
-          const pinned = await navigator.mediaDevices.getUserMedia(constraints);
-          finalStream = pinned;
-          // stop tracks from initialStream that are not used to avoid duplicates if different
-          if (initialStream !== pinned) {
-            initialStream.getTracks().forEach(t => t.stop());
+            let testRecorder: MediaRecorder;
+            if (config.mimeType === '' || MediaRecorder.isTypeSupported(config.mimeType)) {
+              if (config.mimeType === '') {
+                testRecorder = new MediaRecorder(stream);
+              } else {
+                testRecorder = new MediaRecorder(stream, {
+                  mimeType: config.mimeType,
+                  ...config.options
+                });
+              }
+
+              // Test if start() actually works
+              await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  reject(new Error('Start timeout'));
+                }, 1000);
+
+                testRecorder.onstart = () => {
+                  clearTimeout(timeout);
+                  testRecorder.stop(); // Stop the test immediately
+                  resolve();
+                };
+
+                testRecorder.onerror = (ev) => {
+                  clearTimeout(timeout);
+                  reject(ev);
+                };
+
+                try {
+                  testRecorder.start();
+                } catch (err) {
+                  clearTimeout(timeout);
+                  reject(err);
+                }
+              });
+
+              // If we get here, this config works!
+              workingConfig = config;
+              mimeType = config.mimeType;
+              console.log('✅ Found working MediaRecorder config:', config);
+              break;
+            }
+          } catch (err) {
+            console.warn('❌ MediaRecorder config failed:', config, err);
           }
-        } catch (err) {
-          console.warn('Pinned device getUserMedia failed; continuing with initialStream', err);
-          // keep finalStream as initialStream
         }
-      }
 
-      streamRef.current = finalStream;
+        if (!workingConfig) {
+          console.warn('No working MediaRecorder configuration found, continuing without audio recording');
+          // Continue without MediaRecorder - just do video and visualization
+        } else {
+          // Create the actual MediaRecorder with the working config
+          if (workingConfig.mimeType === '') {
+            mediaRecorder = new MediaRecorder(stream);
+          } else {
+            mediaRecorder = new MediaRecorder(stream, {
+              mimeType: workingConfig.mimeType,
+              ...workingConfig.options
+            });
+          }
 
-      // Setup MediaRecorder
-      let mimeType = 'audio/webm;codecs=opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'audio/webm';
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = '';
-        }
-      }
-      console.log('Using mimeType for recorder:', mimeType || 'default');
+          mediaRecorderRef.current = mediaRecorder;
 
-      const mediaRecorder = mimeType ? new MediaRecorder(finalStream!, { mimeType, audioBitsPerSecond: 128000 }) : new MediaRecorder(finalStream!);
-      mediaRecorderRef.current = mediaRecorder;
+          let audioChunks: Blob[] = [];
+          const sendCollectedAudio = () => {
+            if (audioChunks.length > 0) {
+              const combinedBlob = new Blob(audioChunks, { type: mimeType || audioChunks[0]?.type || 'audio/webm' });
+              console.log('Sending combined blob size:', combinedBlob.size);
+              if (combinedBlob.size > 1000) onAudioData(combinedBlob);
+              audioChunks = [];
+            }
+          };
 
-      let audioChunks: Blob[] = [];
-      const sendCollectedAudio = () => {
-        if (audioChunks.length > 0) {
-          const combinedBlob = new Blob(audioChunks, { type: mimeType || audioChunks[0]?.type || 'audio/webm' });
-          console.log('Sending combined blob size:', combinedBlob.size);
-          if (combinedBlob.size > 1000 && onAudioData) onAudioData(combinedBlob);
-          audioChunks = [];
-        }
-      };
+          mediaRecorder.ondataavailable = (event: BlobEvent) => {
+            if (event.data && event.data.size > 0) {
+              audioChunks.push(event.data);
+            }
+          };
 
-      mediaRecorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data && event.data.size > 0) {
-          audioChunks.push(event.data);
-        }
-      };
+          mediaRecorder.onstart = () => {
+            console.log('✅ MediaRecorder started successfully');
+            // timer every 5s to combine chunks
+            audioChunkTimerRef.current = window.setInterval(() => {
+              if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                sendCollectedAudio();
+              }
+            }, 5000);
+          };
 
-      mediaRecorder.onstart = () => {
-        // timer every 5s to combine chunks
-        audioChunkTimerRef.current = window.setInterval(() => {
-          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorder.onstop = () => {
+            console.log('MediaRecorder stopped');
+            if (audioChunkTimerRef.current) {
+              clearInterval(audioChunkTimerRef.current);
+              audioChunkTimerRef.current = null;
+            }
             sendCollectedAudio();
+          };
+
+          mediaRecorder.onerror = (ev) => {
+            console.error('MediaRecorder error', ev);
+            // Try to recover by stopping and restarting
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+              try {
+                mediaRecorderRef.current.stop();
+              } catch (e) {
+                console.warn('Error stopping MediaRecorder:', e);
+              }
+            }
+          };
+
+          try {
+            mediaRecorder.start();
+            console.log('📹 Starting MediaRecorder with working config...');
+          } catch (startError) {
+            console.error('Failed to start MediaRecorder even with tested config:', startError);
+            // Continue without recording
+            mediaRecorderRef.current = null;
           }
-        }, 5000);
-      };
-
-      mediaRecorder.onstop = () => {
-        if (audioChunkTimerRef.current) {
-          clearInterval(audioChunkTimerRef.current);
-          audioChunkTimerRef.current = null;
         }
-        sendCollectedAudio();
-      };
-
-      mediaRecorder.onerror = (ev) => console.error('MediaRecorder error', ev);
-
-      mediaRecorder.start(); // continuous
-
-      // Audio visualization: create/resume AudioContext
-      setupAudioVisualization(finalStream!);
-
-      // video element already set above for initialStream; ensure final stream applied
-      if (videoRef.current && finalStream) {
-        videoRef.current.srcObject = finalStream;
-        videoRef.current.play().catch(() => { });
       }
 
-      // Start frame capture
-      startFrameCapture();
+      // Setup audio visualization
+      setupAudioVisualization(stream);
+
+      // Start frame capture if callback provided
+      if (onVideoFrame) {
+        startFrameCapture();
+      }
 
       setIsStreaming(true);
       if (onStartCapture) onStartCapture();
+
     } catch (err) {
-      // err is unknown, so we need to type guard
       const errorObj = err as Error & { name?: string };
       console.error('Failed to start capture:', err);
-      if (errorObj && (errorObj.name === 'NotAllowedError' || errorObj.name === 'SecurityError')) {
-        setError('Permission denied. Check Chrome site settings (Camera / Microphone) or use HTTPS / localhost.');
+
+      if (errorObj && errorObj.name === 'NotAllowedError') {
+        setError('Permission denied. Please allow camera and microphone access.');
       } else if (errorObj && errorObj.name === 'NotFoundError') {
         setError('No camera/microphone found. Please connect a device.');
       } else if (errorObj && errorObj.name === 'OverconstrainedError') {
-        setError('Requested device not found. Try allowing default devices or check connected devices.');
+        setError('Camera/microphone constraints not supported.');
+      } else if (errorObj && errorObj.name === 'NotSupportedError') {
+        setError('MediaRecorder not supported in this browser. Try Chrome, Firefox, or Safari.');
+      } else if (errorObj?.message?.includes('MediaRecorder')) {
+        setError('Audio recording failed. This might work without audio recording features.');
+        // Continue without audio recording
+        try {
+          console.log('Attempting to continue without MediaRecorder...');
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          streamRef.current = stream;
+          setPermissionStatus('granted');
+
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(err => console.warn('Video autoplay failed:', err));
+          }
+
+          setupAudioVisualization(stream);
+
+          if (onVideoFrame) {
+            startFrameCapture();
+          }
+
+          setIsStreaming(true);
+          if (onStartCapture) onStartCapture();
+          return; // Exit the catch block successfully
+        } catch (recoveryErr) {
+          console.error('Recovery attempt failed:', recoveryErr);
+        }
       } else {
-        setError('Failed to access camera and microphone. Please grant permissions and try again.');
+        setError('Error accessing media devices: ' + (errorObj?.message || 'Unknown error'));
       }
       setPermissionStatus('denied');
     }
