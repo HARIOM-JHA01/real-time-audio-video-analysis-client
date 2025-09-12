@@ -10,6 +10,16 @@ interface MediaCaptureProps {
 }
 
 export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture, onStopCapture }: MediaCaptureProps) {
+  // Enumerate devices on mount for debugging
+  useEffect(() => {
+    navigator.mediaDevices.enumerateDevices()
+      .then(devices => {
+        console.log('Available media devices:', devices);
+      })
+      .catch(err => {
+        console.error('Error enumerating devices:', err);
+      });
+  }, []);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioCanvasRef = useRef<HTMLCanvasElement>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,11 +41,19 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
     try {
       setError(null);
 
-      // Request camera and microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true
-      });
+      // List available devices before requesting
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      console.log('Enumerated devices before getUserMedia:', devices);
+      const videoDevice = devices.find(d => d.kind === 'videoinput');
+      const audioDevice = devices.find(d => d.kind === 'audioinput');
+
+      // Request camera and microphone access (try specific device if available)
+      const constraints = {
+        video: videoDevice ? { deviceId: videoDevice.deviceId } : true,
+        audio: audioDevice ? { deviceId: audioDevice.deviceId } : true
+      };
+      console.log('Requesting getUserMedia with constraints:', constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
       streamRef.current = stream;
       setPermissionStatus('granted');
@@ -140,8 +158,13 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
         onStartCapture();
       }
     } catch (err) {
-      console.error('Error accessing media devices:', err);
-      setError('Failed to access camera and microphone. Please grant permissions and try again.');
+      if (err instanceof DOMException) {
+        console.error('Error accessing media devices:', err.name, err.message);
+        setError(`Failed to access camera and microphone. (${err.name}: ${err.message})`);
+      } else {
+        console.error('Error accessing media devices:', err);
+        setError('Failed to access camera and microphone. Please grant permissions and try again.');
+      }
       setPermissionStatus('denied');
     }
   };
