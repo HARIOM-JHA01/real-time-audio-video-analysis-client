@@ -779,8 +779,8 @@ export default function Home() {
                   <h3 className="text-lg font-semibold text-gray-800">Visual Analysis</h3>
                 </div>
                 <div className="space-y-3">
-                  <div className="text-sm text-gray-700">
-                    {videoAnalyses[videoAnalyses.length - 1]?.description?.substring(0, 100)}...
+                  <div className="text-sm text-gray-700 leading-relaxed max-h-32 overflow-y-auto">
+                    {videoAnalyses[videoAnalyses.length - 1]?.description}
                   </div>
                   {videoAnalyses[videoAnalyses.length - 1]?.objects && (
                     <div>
@@ -817,8 +817,8 @@ export default function Home() {
                     Total transcriptions: {transcriptions.length}
                   </div>
                   {transcriptions.length > 0 && (
-                    <div className="bg-teal-50 rounded-lg p-3 text-sm text-teal-800">
-                      {transcriptions[transcriptions.length - 1]?.text?.substring(0, 80)}...
+                    <div className="bg-teal-50 rounded-lg p-3 text-sm text-teal-800 leading-relaxed max-h-32 overflow-y-auto">
+                      {transcriptions[transcriptions.length - 1]?.text}
                     </div>
                   )}
                   <div className="text-xs text-gray-500">
