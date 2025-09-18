@@ -414,7 +414,7 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-xl shadow-sm">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg shadow-sm mb-4">
           <div className="flex items-center gap-2">
             <span className="text-red-500">⚠️</span>
             {error}
@@ -422,54 +422,26 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
-            🎥 Video Preview
-          </h3>
-          <div className="relative aspect-video">
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full h-full object-cover rounded-lg border-2 border-gray-200 shadow-sm scale-x-[-1]"
-            />
-            {!isStreaming && (
-              <div className="absolute inset-0 bg-gray-100 rounded-lg flex items-center justify-center">
-                <div className="text-center text-gray-500">
-                  <div className="text-4xl mb-2">📹</div>
-                  <p>Camera preview will appear here</p>
-                </div>
-              </div>
-            )}
+      {/* Video Preview - Direct rendering without extra containers */}
+      <div className="relative aspect-video">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          className="w-full h-full object-cover rounded-lg border-2 border-gray-200 shadow-sm scale-x-[-1]"
+        />
+        {!isStreaming && (
+          <div className="absolute inset-0 bg-gray-100 rounded-lg flex items-center justify-center">
+            <div className="text-center text-gray-500">
+              <div className="text-4xl mb-2">📹</div>
+              <p>Camera preview will appear here</p>
+            </div>
           </div>
-        </div>
-
-        {/* Audio Levels Section - Hidden for cleaner UI */}
-        <div className="hidden bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
-            🎵 Audio Levels
-          </h3>
-          <div className="relative">
-            <canvas
-              ref={audioCanvasRef}
-              width="400"
-              height="200"
-              className="w-full border-2 border-gray-200 rounded-lg shadow-sm"
-            />
-            {!isStreaming && (
-              <div className="absolute inset-0 bg-gray-100 rounded-lg flex items-center justify-center">
-                <div className="text-center text-gray-500">
-                  <div className="text-4xl mb-2">🎤</div>
-                  <p>Audio visualization will appear here</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
+      {/* Hidden canvas for frame capture */}
       <canvas
         ref={captureCanvasRef}
         style={{ display: 'none' }}

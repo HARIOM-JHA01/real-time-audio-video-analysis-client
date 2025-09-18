@@ -436,7 +436,7 @@ export default function Home() {
         {/* Media Capture and Analysis Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {/* Video Preview */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-white/20 p-8 shadow-xl h-fit">
+          <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-white/20 p-8 shadow-xl h-fit min-h-[500px]">
             <div className="flex items-center gap-4 mb-8">
               <div className="p-3 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl">
                 <div className="text-2xl">🎥</div>
@@ -455,7 +455,7 @@ export default function Home() {
           </div>
 
           {/* Current Emotion Analysis */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-white/20 p-8 shadow-xl h-fit">
+          <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-white/20 p-8 shadow-xl h-fit min-h-[500px]">
             <div className="flex items-center gap-4 mb-8">
               <div className="p-3 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl">
                 <div className="text-2xl">😊</div>
@@ -468,11 +468,11 @@ export default function Home() {
             
             {/* Current Emotion Display */}
             {emotionHistory.length > 0 && (
-              <div className="space-y-4">
+              <div className="space-y-6 h-full flex flex-col justify-between">
                 <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Current Mood</h3>
                   <div className="text-center">
-                    <div className="text-4xl mb-2">
+                    <div className="text-6xl mb-3">
                       {emotionHistory[emotionHistory.length - 1]?.mood === 'happy' && '😊'}
                       {emotionHistory[emotionHistory.length - 1]?.mood === 'sad' && '😢'}
                       {emotionHistory[emotionHistory.length - 1]?.mood === 'excited' && '🤩'}
@@ -481,7 +481,7 @@ export default function Home() {
                       {emotionHistory[emotionHistory.length - 1]?.mood === 'stressed' && '😰'}
                       {(!emotionHistory[emotionHistory.length - 1]?.mood || emotionHistory[emotionHistory.length - 1]?.mood === 'neutral') && '😐'}
                     </div>
-                    <p className="text-lg font-medium text-gray-700 capitalize">
+                    <p className="text-xl font-medium text-gray-700 capitalize">
                       {emotionHistory[emotionHistory.length - 1]?.mood || 'neutral'}
                     </p>
                   </div>
@@ -517,9 +517,16 @@ export default function Home() {
             )}
             
             {emotionHistory.length === 0 && (
-              <div className="text-center py-12 text-gray-500">
-                <div className="text-6xl mb-4">🎭</div>
-                <p>Start video capture to see emotion analysis</p>
+              <div className="text-center py-20 text-gray-500 h-full flex flex-col justify-center">
+                <div className="text-8xl mb-6">🎭</div>
+                <h3 className="text-xl font-medium mb-2">Emotion Detection Ready</h3>
+                <p className="text-gray-400">Start video capture to see real-time emotion analysis</p>
+                <div className="mt-8 space-y-2">
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="bg-gradient-to-r from-purple-400 to-pink-400 h-2 rounded-full w-0"></div>
+                  </div>
+                  <p className="text-sm text-gray-400">Waiting for first analysis...</p>
+                </div>
               </div>
             )}
           </div>
