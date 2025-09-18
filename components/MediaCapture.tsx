@@ -427,13 +427,13 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
           <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
             🎥 Video Preview
           </h3>
-          <div className="relative">
+          <div className="relative aspect-video">
             <video
               ref={videoRef}
               autoPlay
               muted
               playsInline
-              className="w-full rounded-lg border-2 border-gray-200 shadow-sm scale-x-[-1]"
+              className="w-full h-full object-cover rounded-lg border-2 border-gray-200 shadow-sm scale-x-[-1]"
             />
             {!isStreaming && (
               <div className="absolute inset-0 bg-gray-100 rounded-lg flex items-center justify-center">

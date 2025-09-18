@@ -433,44 +433,436 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Media Capture Section */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-white/20 p-8 shadow-xl">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="p-3 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl">
-              <div className="text-2xl">🎥</div>
+        {/* Media Capture and Analysis Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {/* Video Preview */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-white/20 p-8 shadow-xl h-fit">
+            <div className="flex items-center gap-4 mb-8">
+              <div className="p-3 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl">
+                <div className="text-2xl">🎥</div>
+              </div>
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900">Video Preview</h2>
+                <p className="text-gray-600">Real-time video capture</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900">Media Capture</h2>
-              <p className="text-gray-600">Real-time video and audio processing</p>
-            </div>
+            <MediaCapture
+              onAudioData={handleAudioData}
+              onVideoFrame={handleVideoFrame}
+              onStartCapture={handleStartCapture}
+              onStopCapture={handleStopCapture}
+            />
           </div>
-          <MediaCapture
-            onAudioData={handleAudioData}
-            onVideoFrame={handleVideoFrame}
-            onStartCapture={handleStartCapture}
-            onStopCapture={handleStopCapture}
-          />
+
+          {/* Current Emotion Analysis */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-white/20 p-8 shadow-xl h-fit">
+            <div className="flex items-center gap-4 mb-8">
+              <div className="p-3 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl">
+                <div className="text-2xl">😊</div>
+              </div>
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900">Current Emotions</h2>
+                <p className="text-gray-600">Real-time emotion detection</p>
+              </div>
+            </div>
+            
+            {/* Current Emotion Display */}
+            {emotionHistory.length > 0 && (
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Current Mood</h3>
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">
+                      {emotionHistory[emotionHistory.length - 1]?.mood === 'happy' && '😊'}
+                      {emotionHistory[emotionHistory.length - 1]?.mood === 'sad' && '😢'}
+                      {emotionHistory[emotionHistory.length - 1]?.mood === 'excited' && '🤩'}
+                      {emotionHistory[emotionHistory.length - 1]?.mood === 'calm' && '😌'}
+                      {emotionHistory[emotionHistory.length - 1]?.mood === 'focused' && '🤔'}
+                      {emotionHistory[emotionHistory.length - 1]?.mood === 'stressed' && '😰'}
+                      {(!emotionHistory[emotionHistory.length - 1]?.mood || emotionHistory[emotionHistory.length - 1]?.mood === 'neutral') && '😐'}
+                    </div>
+                    <p className="text-lg font-medium text-gray-700 capitalize">
+                      {emotionHistory[emotionHistory.length - 1]?.mood || 'neutral'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Current Emotion Bars */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold text-gray-800">Emotion Levels</h3>
+                  {Object.entries(emotionHistory[emotionHistory.length - 1]?.emotions || {}).map(([emotion, value]) => (
+                    <div key={emotion} className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="capitalize text-gray-700">{emotion}</span>
+                        <span className="text-gray-500">{Math.round(value * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            emotion === 'happiness' ? 'bg-yellow-400' :
+                            emotion === 'sadness' ? 'bg-blue-400' :
+                            emotion === 'excitement' ? 'bg-orange-400' :
+                            emotion === 'calmness' ? 'bg-green-400' :
+                            emotion === 'stress' ? 'bg-red-400' :
+                            emotion === 'focus' ? 'bg-purple-400' :
+                            'bg-gray-400'
+                          }`}
+                          style={{ width: `${value * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {emotionHistory.length === 0 && (
+              <div className="text-center py-12 text-gray-500">
+                <div className="text-6xl mb-4">🎭</div>
+                <p>Start video capture to see emotion analysis</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Insights Dashboard */}
-        <div>
+        {/* Emotion Timeline Graphs */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-white/20 p-8 shadow-xl">
           <div className="flex items-center gap-4 mb-8">
-            <div className="p-3 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl">
-              <div className="text-2xl">📊</div>
+            <div className="p-3 bg-gradient-to-r from-green-500 to-teal-500 rounded-2xl">
+              <div className="text-2xl">📈</div>
             </div>
             <div>
-              <h2 className="text-3xl font-bold text-gray-900">Live Insights</h2>
-              <p className="text-gray-600">Emotion analysis and mood tracking</p>
+              <h2 className="text-3xl font-bold text-gray-900">Emotion Timeline</h2>
+              <p className="text-gray-600">Track emotional changes over time</p>
             </div>
           </div>
-          <InsightsDashboard
-            transcriptions={transcriptions}
-            videoAnalyses={videoAnalyses}
-            emotionHistory={emotionHistory}
-            isConnected={isConnected}
-            aiInsights={aiInsights}
-            aiLoading={aiLoading}
-          />
+          
+          {emotionHistory.length > 1 ? (
+            <div className="space-y-6">
+              {/* Timeline Graph */}
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Emotion Trends</h3>
+                <div className="relative h-64 w-full">
+                  <svg className="w-full h-full" viewBox="0 0 800 200">
+                    {/* Grid lines */}
+                    {[0, 1, 2, 3, 4].map(i => (
+                      <line 
+                        key={i} 
+                        x1="50" 
+                        y1={40 + i * 32} 
+                        x2="750" 
+                        y2={40 + i * 32} 
+                        stroke="#e5e7eb" 
+                        strokeWidth="1"
+                      />
+                    ))}
+                    
+                    {/* Emotion lines */}
+                    {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion, emotionIndex) => {
+                      const color = {
+                        happiness: '#fbbf24',
+                        sadness: '#60a5fa',
+                        excitement: '#fb7185',
+                        calmness: '#34d399',
+                        stress: '#f87171',
+                        focus: '#a78bfa'
+                      }[emotion];
+                      
+                      const points = emotionHistory.slice(-20).map((entry, index) => {
+                        const x = 50 + (index / 19) * 700;
+                        const y = 168 - (entry.emotions[emotion] || 0) * 128;
+                        return `${x},${y}`;
+                      }).join(' ');
+                      
+                      return (
+                        <polyline 
+                          key={emotion}
+                          fill="none" 
+                          stroke={color} 
+                          strokeWidth="2"
+                          points={points}
+                        />
+                      );
+                    })}
+                    
+                    {/* Y-axis labels */}
+                    <text x="25" y="45" textAnchor="middle" className="text-xs fill-gray-500">100%</text>
+                    <text x="25" y="105" textAnchor="middle" className="text-xs fill-gray-500">50%</text>
+                    <text x="25" y="175" textAnchor="middle" className="text-xs fill-gray-500">0%</text>
+                  </svg>
+                </div>
+                
+                {/* Legend */}
+                <div className="flex flex-wrap gap-4 mt-4 justify-center">
+                  {[
+                    { emotion: 'happiness', color: '#fbbf24', emoji: '😊' },
+                    { emotion: 'sadness', color: '#60a5fa', emoji: '😢' },
+                    { emotion: 'excitement', color: '#fb7185', emoji: '🤩' },
+                    { emotion: 'calmness', color: '#34d399', emoji: '😌' },
+                    { emotion: 'stress', color: '#f87171', emoji: '😰' },
+                    { emotion: 'focus', color: '#a78bfa', emoji: '🤔' }
+                  ].map(({ emotion, color, emoji }) => (
+                    <div key={emotion} className="flex items-center gap-2 text-sm">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }}></div>
+                      <span className="capitalize text-gray-700">{emoji} {emotion}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <div className="text-6xl mb-4">📊</div>
+              <p>Emotion timeline will appear after video analysis starts</p>
+            </div>
+          )}
+        </div>
+
+        {/* Multiple AI Insights */}
+        <div className="space-y-6">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="p-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl">
+              <div className="text-2xl">🤖</div>
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900">AI Insights</h2>
+              <p className="text-gray-600">Multiple intelligence analysis streams</p>
+            </div>
+          </div>
+
+          {/* AI Insights Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            
+            {/* Sentiment Analysis */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-gradient-to-r from-green-400 to-blue-500 rounded-lg">
+                  <div className="text-lg">💭</div>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-800">Sentiment Analysis</h3>
+              </div>
+              {aiInsights.sentiment ? (
+                <div className="space-y-3">
+                  <div className={`px-3 py-2 rounded-full text-sm font-medium ${
+                    aiInsights.sentiment.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
+                    aiInsights.sentiment.sentiment === 'negative' ? 'bg-red-100 text-red-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {aiInsights.sentiment.sentiment === 'positive' ? '😊 Positive' :
+                     aiInsights.sentiment.sentiment === 'negative' ? '😔 Negative' :
+                     '😐 Neutral'}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    Confidence: {Math.round(aiInsights.sentiment.confidence * 100)}%
+                  </div>
+                  <div className="text-sm text-gray-700">
+                    {aiInsights.sentiment.reasoning}
+                  </div>
+                  {aiInsights.sentiment.emotions && aiInsights.sentiment.emotions.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {aiInsights.sentiment.emotions.map((emotion, idx) => (
+                        <span key={idx} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
+                          {emotion}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-4">
+                  <div className="text-2xl mb-2">�</div>
+                  <p className="text-sm">Waiting for speech...</p>
+                </div>
+              )}
+            </div>
+
+            {/* Keywords Extraction */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg">
+                  <div className="text-lg">🔑</div>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-800">Key Topics</h3>
+              </div>
+              {aiInsights.keywords ? (
+                <div className="space-y-3">
+                  <div className={`px-3 py-2 rounded-full text-sm font-medium ${
+                    aiInsights.keywords.urgency === 'high' ? 'bg-red-100 text-red-700' :
+                    aiInsights.keywords.urgency === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {aiInsights.keywords.urgency === 'high' ? '🔴 High Priority' :
+                     aiInsights.keywords.urgency === 'medium' ? '🟡 Medium Priority' :
+                     '🟢 Low Priority'}
+                  </div>
+                  
+                  {aiInsights.keywords.keywords && aiInsights.keywords.keywords.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Keywords:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {aiInsights.keywords.keywords.slice(0, 6).map((keyword, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full">
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {aiInsights.keywords.categories && (
+                    <div className="space-y-2">
+                      {Object.entries(aiInsights.keywords.categories).map(([category, items]) => 
+                        items.length > 0 && (
+                          <div key={category}>
+                            <p className="text-xs text-gray-500 capitalize">{category}:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {items.slice(0, 3).map((item, idx) => (
+                                <span key={idx} className="px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-full">
+                                  {item}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-4">
+                  <div className="text-2xl mb-2">🔄</div>
+                  <p className="text-sm">Analyzing topics...</p>
+                </div>
+              )}
+            </div>
+
+            {/* Translation (if available) */}
+            {aiInsights.translation && (
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-gradient-to-r from-blue-400 to-purple-500 rounded-lg">
+                    <div className="text-lg">🌐</div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-800">Translation</h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="text-sm">
+                    <span className="text-gray-500">From:</span> {aiInsights.translation.sourceLanguage}
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-gray-500">To:</span> {aiInsights.translation.targetLanguage}
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-800">
+                    {aiInsights.translation.translatedText}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Confidence: {Math.round(aiInsights.translation.confidence * 100)}%
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Video Analysis Summary */}
+            {videoAnalyses.length > 0 && (
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-gradient-to-r from-pink-400 to-red-500 rounded-lg">
+                    <div className="text-lg">👁️</div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-800">Visual Analysis</h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="text-sm text-gray-700">
+                    {videoAnalyses[videoAnalyses.length - 1]?.description?.substring(0, 100)}...
+                  </div>
+                  {videoAnalyses[videoAnalyses.length - 1]?.objects && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Objects detected:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {videoAnalyses[videoAnalyses.length - 1].objects.slice(0, 4).map((obj, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">
+                            {obj}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {videoAnalyses[videoAnalyses.length - 1]?.scene && (
+                    <div className="text-sm">
+                      <span className="text-gray-500">Scene:</span> {videoAnalyses[videoAnalyses.length - 1].scene}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Transcription Summary */}
+            {transcriptions.length > 0 && (
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-gradient-to-r from-teal-400 to-green-500 rounded-lg">
+                    <div className="text-lg">🎤</div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-800">Speech Summary</h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="text-sm text-gray-500">
+                    Total transcriptions: {transcriptions.length}
+                  </div>
+                  {transcriptions.length > 0 && (
+                    <div className="bg-teal-50 rounded-lg p-3 text-sm text-teal-800">
+                      {transcriptions[transcriptions.length - 1]?.text?.substring(0, 80)}...
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-500">
+                    Last updated: {new Date(transcriptions[transcriptions.length - 1]?.timestamp || Date.now()).toLocaleTimeString()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Connection Status */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-gradient-to-r from-gray-400 to-slate-500 rounded-lg">
+                  <div className="text-lg">📡</div>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-800">System Status</h3>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">WebSocket:</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    isConnected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  }`}>
+                    {isConnected ? 'Connected' : 'Disconnected'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Speech API:</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    isSupported ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  }`}>
+                    {isSupported ? 'Ready' : 'Unavailable'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Listening:</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    isListening ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {isListening ? 'Active' : 'Idle'}
+                  </span>
+                </div>
+                {aiLoading && (
+                  <div className="flex items-center gap-2 text-sm text-blue-600">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                    <span>AI Processing...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

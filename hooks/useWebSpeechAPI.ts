@@ -94,6 +94,19 @@ export const useWebSpeechAPI = (): UseWebSpeechAPIReturn => {
         recognition.interimResults = true;       // Get interim results
         recognition.lang = language;             // Set language dynamically
         recognition.maxAlternatives = 3;        // Get more alternatives for language detection
+        
+        // Additional configuration for better performance
+        if ('serviceURI' in recognition) {
+            // Some browsers support service URI for better recognition
+        }
+        
+        // Set grammars for better accuracy (if supported)
+        if ('grammars' in recognition && (window as any).SpeechGrammarList) {
+            const grammar = '#JSGF V1.0; grammar phrases; public <phrase> = hello | goodbye | yes | no | please | thank you | excuse me | sorry ;';
+            const speechRecognitionList = new (window as any).SpeechGrammarList();
+            speechRecognitionList.addFromString(grammar, 1);
+            recognition.grammars = speechRecognitionList;
+        }
 
         // Event handlers
         recognition.onstart = () => {
@@ -105,11 +118,53 @@ export const useWebSpeechAPI = (): UseWebSpeechAPIReturn => {
         recognition.onend = () => {
             console.log('🛑 Speech recognition ended');
             setIsListening(false);
+            
+            // Auto-restart if we're supposed to be listening and it wasn't an error that stopped it
+            if (isListening && !error) {
+                console.log('🔄 Auto-restarting speech recognition...');
+                setTimeout(() => {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        console.log('⚠️ Could not auto-restart recognition:', e);
+                    }
+                }, 100); // Small delay before restart
+            }
         };
 
         recognition.onerror = (event: any) => {
             console.error('❌ Speech recognition error:', event.error);
-            setError(`Speech recognition error: ${event.error}`);
+            
+            // Handle different error types more gracefully
+            let errorMessage = '';
+            switch (event.error) {
+                case 'no-speech':
+                    // This is not really an error - just no speech detected
+                    console.log('ℹ️ No speech detected, continuing to listen...');
+                    // Don't show this as an error to the user, just log it
+                    return; // Don't set error state for no-speech
+                    
+                case 'audio-capture':
+                    errorMessage = 'Microphone access denied or not available';
+                    break;
+                    
+                case 'not-allowed':
+                    errorMessage = 'Microphone permission denied. Please allow microphone access.';
+                    break;
+                    
+                case 'network':
+                    errorMessage = 'Network error during speech recognition';
+                    break;
+                    
+                case 'service-not-allowed':
+                    errorMessage = 'Speech recognition service not allowed';
+                    break;
+                    
+                default:
+                    errorMessage = `Speech recognition error: ${event.error}`;
+            }
+            
+            setError(errorMessage);
             setIsListening(false);
         };
 
@@ -169,21 +224,29 @@ export const useWebSpeechAPI = (): UseWebSpeechAPIReturn => {
             return;
         }
 
+        // Clear any previous errors
+        setError(null);
+
         try {
+            // Stop any existing recognition
             if (recognitionRef.current) {
                 recognitionRef.current.stop();
+                recognitionRef.current = null;
             }
 
-            recognitionRef.current = initializeRecognition(langToUse);
+            // Small delay to ensure previous recognition is fully stopped
+            setTimeout(() => {
+                recognitionRef.current = initializeRecognition(langToUse);
 
-            if (recognitionRef.current) {
-                recognitionRef.current.start();
-                console.log('🎤 Starting speech recognition in', langToUse);
-                setCurrentLanguage(langToUse);
-            }
+                if (recognitionRef.current) {
+                    recognitionRef.current.start();
+                    console.log('🎤 Starting speech recognition in', langToUse);
+                    setCurrentLanguage(langToUse);
+                }
+            }, 100);
         } catch (err) {
             console.error('❌ Error starting speech recognition:', err);
-            setError('Failed to start speech recognition');
+            setError('Failed to start speech recognition. Please check microphone permissions.');
         }
     }, [isSupported, initializeRecognition, currentLanguage]);
 
