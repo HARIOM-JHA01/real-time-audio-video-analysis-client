@@ -6,6 +6,7 @@ import InsightsDashboard from '@/components/InsightsDashboard';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useWebSpeechAPI } from '@/hooks/useWebSpeechAPI';
 import { useAIInsights } from '@/hooks/useAIInsights';
+import Image from 'next/image';
 
 interface Transcription {
   text: string;
@@ -20,6 +21,8 @@ interface VideoAnalysis {
   timestamp: number;
   objects?: string[];
   scene?: string;
+  emotions?: { [key: string]: number };
+  mood?: string;
 }
 
 interface SentimentResult {
@@ -69,6 +72,11 @@ export default function Home() {
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
   const [videoAnalyses, setVideoAnalyses] = useState<VideoAnalysis[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [emotionHistory, setEmotionHistory] = useState<Array<{
+    timestamp: number;
+    emotions: { [key: string]: number };
+    mood: string;
+  }>>([]);
   const [aiInsights, setAIInsights] = useState<{
     sentiment?: SentimentResult;
     keywords?: KeywordResult;
@@ -132,10 +140,74 @@ export default function Home() {
     });
   }, [transcriptions, videoAnalyses, isConnected, isCapturing, isListening, isSupported, messages, aiInsights]);
 
+  // Extract emotions from text using keyword analysis
+  const extractEmotionsFromText = useCallback((text: string): { [key: string]: number } => {
+    const lowerText = text.toLowerCase();
+    const emotions: { [key: string]: number } = {};
+
+    // Happiness indicators
+    const happinessWords = ['happy', 'joy', 'joyful', 'great', 'amazing', 'wonderful', 'excellent', 'fantastic', 'love', 'excited', 'cheerful', 'pleased', 'delighted', 'content', 'upbeat', 'good', 'awesome', 'perfect'];
+    const happinessScore = happinessWords.reduce((score, word) => 
+      score + (lowerText.includes(word) ? 0.15 : 0), 0);
+    emotions.happiness = Math.min(happinessScore, 1.0);
+
+    // Sadness indicators
+    const sadnessWords = ['sad', 'melancholy', 'down', 'depressed', 'gloomy', 'unhappy', 'sorrowful', 'disappointed', 'upset', 'terrible', 'awful', 'bad', 'horrible'];
+    const sadnessScore = sadnessWords.reduce((score, word) => 
+      score + (lowerText.includes(word) ? 0.2 : 0), 0);
+    emotions.sadness = Math.min(sadnessScore, 1.0);
+
+    // Excitement indicators
+    const excitementWords = ['excited', 'energetic', 'enthusiastic', 'thrilled', 'animated', 'vibrant', 'wow', 'incredible', 'unbelievable', 'amazing', 'fantastic'];
+    const excitementScore = excitementWords.reduce((score, word) => 
+      score + (lowerText.includes(word) ? 0.2 : 0), 0);
+    emotions.excitement = Math.min(excitementScore, 1.0);
+
+    // Calmness indicators
+    const calmnessWords = ['calm', 'peaceful', 'relaxed', 'serene', 'tranquil', 'composed', 'steady', 'quiet', 'still', 'gentle'];
+    const calmnessScore = calmnessWords.reduce((score, word) => 
+      score + (lowerText.includes(word) ? 0.2 : 0), 0);
+    emotions.calmness = Math.min(calmnessScore, 1.0);
+
+    // Stress indicators
+    const stressWords = ['stressed', 'tense', 'anxious', 'worried', 'overwhelmed', 'frantic', 'agitated', 'nervous', 'concerned', 'trouble', 'problem', 'difficult', 'hard'];
+    const stressScore = stressWords.reduce((score, word) => 
+      score + (lowerText.includes(word) ? 0.2 : 0), 0);
+    emotions.stress = Math.min(stressScore, 1.0);
+
+    // Focus indicators
+    const focusWords = ['focused', 'concentrated', 'attentive', 'engaged', 'absorbed', 'thinking', 'considering', 'working', 'studying'];
+    const focusScore = focusWords.reduce((score, word) => 
+      score + (lowerText.includes(word) ? 0.2 : 0), 0);
+    emotions.focus = Math.min(focusScore, 1.0);
+
+    // Default neutral state if no emotions detected
+    const totalEmotions = Object.values(emotions).reduce((sum, val) => sum + val, 0);
+    if (totalEmotions === 0) {
+      emotions.neutral = 0.7;
+    }
+
+    return emotions;
+  }, []);
+
   // Perform AI analysis on transcribed text
   const performAIAnalysis = useCallback(async (text: string, language: string) => {
     try {
       console.log('🤖 Starting AI analysis for:', text.substring(0, 50) + '...');
+
+      // Extract emotions from the transcribed text
+      const emotions = extractEmotionsFromText(text);
+      console.log('😊 Emotions extracted from audio:', emotions);
+
+      // Add emotions to emotion history
+      const emotionData = {
+        timestamp: Date.now(),
+        emotions,
+        mood: 'neutral', // Could be enhanced with mood extraction
+        source: 'audio'
+      };
+
+      setEmotionHistory(prev => [...prev.slice(-19), emotionData]); // Keep last 20 entries
 
       // Run sentiment analysis and keyword extraction in parallel
       const [sentiment, keywords] = await Promise.all([
@@ -173,7 +245,7 @@ export default function Home() {
     } catch (error) {
       console.error('❌ AI analysis error:', error);
     }
-  }, [analyzeSentiment, extractKeywords, translateText]);
+  }, [analyzeSentiment, extractKeywords, translateText, extractEmotionsFromText]);
 
   // Handle speech recognition results with AI analysis
   useEffect(() => {
@@ -244,11 +316,23 @@ export default function Home() {
         case 'video-analysis':
           console.log('🎥 Video analysis received:', message.data);
 
+          // Extract emotion data and add to history
+          const emotionData = {
+            timestamp: message.timestamp,
+            emotions: message.data.emotions || {},
+            mood: message.data.mood || 'neutral',
+            source: 'video'
+          };
+
+          setEmotionHistory(prev => [...prev.slice(-19), emotionData]); // Keep last 20 entries
+
           setVideoAnalyses(prev => [...prev, {
             description: message.data.description || message.data,
             timestamp: message.timestamp,
             objects: message.data.objects,
-            scene: message.data.scene
+            scene: message.data.scene,
+            emotions: message.data.emotions,
+            mood: message.data.mood
           }]);
           break;
 
@@ -285,57 +369,80 @@ export default function Home() {
   }, [stopListening]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <div className="max-w-7xl mx-auto p-8 space-y-8">
-        {/* Header */}
-        <div className="text-center bg-white rounded-2xl p-8 shadow-lg border">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="text-4xl">🤖</div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Real-time Audio & Video Analysis
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Modern Header */}
+        <div className="text-center bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-white/20">
+          <div className="flex items-center justify-center gap-4 mb-6">
+            {/* <div className="text-5xl animate-pulse">🎭</div> */}
+            <Image src="/rolplay-logo.webp" alt="RolPlay Logo" width={80} height={80} className="rounded-full" />
+            <h1 className="text-5xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+              RolPlay AI Analytics
             </h1>
           </div>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            AI-powered live insights from your camera and microphone using cutting-edge technology
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+            Advanced emotion detection and real-time mood analysis powered by AI
           </p>
-          <div className="flex items-center justify-center gap-4 mt-6">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-              <span>GPT-4o Vision</span>
+          <div className="flex items-center justify-center gap-6 mt-8 flex-wrap">
+            <div className="flex items-center gap-3 bg-gradient-to-r from-blue-500/10 to-blue-600/10 px-4 py-2 rounded-full">
+              <span className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></span>
+              <span className="text-sm font-medium text-blue-700">GPT-4o Vision</span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-              <span>Web Speech API</span>
+            <div className="flex items-center gap-3 bg-gradient-to-r from-green-500/10 to-green-600/10 px-4 py-2 rounded-full">
+              <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
+              <span className="text-sm font-medium text-green-700">Emotion Detection</span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-              <span>Real-time Processing</span>
+            <div className="flex items-center gap-3 bg-gradient-to-r from-purple-500/10 to-purple-600/10 px-4 py-2 rounded-full">
+              <span className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></span>
+              <span className="text-sm font-medium text-purple-700">Real-time Analysis</span>
+            </div>
+          </div>
+
+          {/* Connection Status */}
+          <div className="flex items-center justify-center gap-4 mt-6 pt-6 border-t border-gray-200">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
+              isConnected 
+                ? 'bg-green-100 text-green-700 border border-green-200' 
+                : 'bg-red-100 text-red-700 border border-red-200'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </div>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
+              isSupported 
+                ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                : 'bg-yellow-100 text-yellow-700 border border-yellow-200'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${isSupported ? 'bg-blue-500' : 'bg-yellow-500'}`}></span>
+              Speech {isSupported ? 'Ready' : 'Unavailable'}
             </div>
           </div>
 
           {/* Language Selector */}
-          <div className="flex items-center justify-center gap-4 mt-6 pt-4 border-t border-gray-200">
-            <span className="text-sm font-medium text-gray-700">Speech Language:</span>
+          <div className="flex items-center justify-center gap-4 mt-4">
+            <span className="text-sm font-medium text-gray-700">Language:</span>
             <select
               value={currentLanguage}
               onChange={(e) => setLanguage(e.target.value)}
-              className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white shadow-sm"
             >
               <option value="en-US">🇺🇸 English (US)</option>
               <option value="es-ES">🇪🇸 Español (España)</option>
               <option value="es-MX">🇲🇽 Español (México)</option>
             </select>
-            <span className="text-xs text-gray-500">
-              Current: {currentLanguage === 'en-US' ? 'English' : 'Spanish'}
-            </span>
           </div>
         </div>
 
         {/* Media Capture Section */}
-        <div className="bg-white rounded-2xl border p-8 shadow-lg">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="text-2xl">🎥</div>
-            <h2 className="text-3xl font-semibold text-gray-900">Media Capture</h2>
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-white/20 p-8 shadow-xl">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="p-3 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl">
+              <div className="text-2xl">🎥</div>
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900">Media Capture</h2>
+              <p className="text-gray-600">Real-time video and audio processing</p>
+            </div>
           </div>
           <MediaCapture
             onAudioData={handleAudioData}
@@ -347,13 +454,19 @@ export default function Home() {
 
         {/* Insights Dashboard */}
         <div>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="text-2xl">📊</div>
-            <h2 className="text-3xl font-semibold text-gray-900">Live Insights</h2>
+          <div className="flex items-center gap-4 mb-8">
+            <div className="p-3 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl">
+              <div className="text-2xl">📊</div>
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900">Live Insights</h2>
+              <p className="text-gray-600">Emotion analysis and mood tracking</p>
+            </div>
           </div>
           <InsightsDashboard
             transcriptions={transcriptions}
             videoAnalyses={videoAnalyses}
+            emotionHistory={emotionHistory}
             isConnected={isConnected}
             aiInsights={aiInsights}
             aiLoading={aiLoading}

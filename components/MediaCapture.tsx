@@ -433,7 +433,7 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
               autoPlay
               muted
               playsInline
-              className="w-full rounded-lg border-2 border-gray-200 shadow-sm"
+              className="w-full rounded-lg border-2 border-gray-200 shadow-sm scale-x-[-1]"
             />
             {!isStreaming && (
               <div className="absolute inset-0 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -446,7 +446,8 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
           </div>
         </div>
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
+        {/* Audio Levels Section - Hidden for cleaner UI */}
+        <div className="hidden bg-white rounded-xl p-6 shadow-sm border">
           <h3 className="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
             🎵 Audio Levels
           </h3>
