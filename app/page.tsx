@@ -386,7 +386,7 @@ export default function Home() {
           <div className="flex items-center justify-center gap-6 mt-8 flex-wrap">
             <div className="flex items-center gap-3 bg-gradient-to-r from-blue-500/10 to-blue-600/10 px-4 py-2 rounded-full">
               <span className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></span>
-              <span className="text-sm font-medium text-blue-700">GPT-4o Vision</span>
+              <span className="text-sm font-medium text-blue-700">Multi-Modal Insights</span>
             </div>
             <div className="flex items-center gap-3 bg-gradient-to-r from-green-500/10 to-green-600/10 px-4 py-2 rounded-full">
               <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
