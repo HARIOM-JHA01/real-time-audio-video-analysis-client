@@ -487,31 +487,34 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Current Emotion Bars */}
+                {/* Current Emotion Bars - always show all 6 */}
                 <div className="space-y-3">
                   <h3 className="text-lg font-semibold text-gray-800">Emotion Levels</h3>
-                  {Object.entries(emotionHistory[emotionHistory.length - 1]?.emotions || {}).map(([emotion, value]) => (
-                    <div key={emotion} className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="capitalize text-gray-700">{emotion}</span>
-                        <span className="text-gray-500">{Math.round(value * 100)}%</span>
+                  {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion) => {
+                    const value = emotionHistory[emotionHistory.length - 1]?.emotions?.[emotion] ?? 0;
+                    return (
+                      <div key={emotion} className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="capitalize text-gray-700">{emotion}</span>
+                          <span className="text-gray-500">{Math.round(value * 100)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              emotion === 'happiness' ? 'bg-yellow-400' :
+                              emotion === 'sadness' ? 'bg-blue-400' :
+                              emotion === 'excitement' ? 'bg-orange-400' :
+                              emotion === 'calmness' ? 'bg-green-400' :
+                              emotion === 'stress' ? 'bg-red-400' :
+                              emotion === 'focus' ? 'bg-purple-400' :
+                              'bg-gray-400'
+                            }`}
+                            style={{ width: `${value * 100}%` }}
+                          ></div>
+                        </div>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all duration-300 ${
-                            emotion === 'happiness' ? 'bg-yellow-400' :
-                            emotion === 'sadness' ? 'bg-blue-400' :
-                            emotion === 'excitement' ? 'bg-orange-400' :
-                            emotion === 'calmness' ? 'bg-green-400' :
-                            emotion === 'stress' ? 'bg-red-400' :
-                            emotion === 'focus' ? 'bg-purple-400' :
-                            'bg-gray-400'
-                          }`}
-                          style={{ width: `${value * 100}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
