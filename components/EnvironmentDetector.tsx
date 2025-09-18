@@ -1,6 +1,15 @@
 'use client';
 
+
 import { useState, useEffect } from 'react';
+
+// Extend the Window interface for speech recognition properties
+type SpeechRecognitionWindow = typeof window & {
+  SpeechRecognition?: typeof window.SpeechRecognition;
+  webkitSpeechRecognition?: typeof window.SpeechRecognition;
+  mozSpeechRecognition?: typeof window.SpeechRecognition;
+  msSpeechRecognition?: typeof window.SpeechRecognition;
+};
 
 interface EnvironmentInfo {
   browser: string;
@@ -71,10 +80,10 @@ export default function EnvironmentDetector() {
       // Feature detection
       const webRTCSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
       const speechRecognitionSupported = !!(
-        window.SpeechRecognition || 
-        (window as any).webkitSpeechRecognition ||
-        (window as any).mozSpeechRecognition ||
-        (window as any).msSpeechRecognition
+        (window as SpeechRecognitionWindow).SpeechRecognition ||
+        (window as SpeechRecognitionWindow).webkitSpeechRecognition ||
+        (window as SpeechRecognitionWindow).mozSpeechRecognition ||
+        (window as SpeechRecognitionWindow).msSpeechRecognition
       );
       const mediaDevicesSupported = !!navigator.mediaDevices;
       const webSocketSupported = !!window.WebSocket;
