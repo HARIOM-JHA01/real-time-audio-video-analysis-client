@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import MediaCapture from '@/components/MediaCapture';
-import InsightsDashboard from '@/components/InsightsDashboard';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useWebSpeechAPI } from '@/hooks/useWebSpeechAPI';
 import { useAIInsights } from '@/hooks/useAIInsights';
@@ -490,10 +489,10 @@ export default function Home() {
                 {/* Current Emotion Bars - always show all 6 */}
                 <div className="space-y-3">
                   <h3 className="text-lg font-semibold text-gray-800">Emotion Levels</h3>
-                  {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion) => {
+                  {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion, emotionIndex) => {
                     const value = emotionHistory[emotionHistory.length - 1]?.emotions?.[emotion] ?? 0;
                     return (
-                      <div key={emotion} className="space-y-1">
+                      <div key={emotionIndex} className="space-y-1">
                         <div className="flex justify-between text-sm">
                           <span className="capitalize text-gray-700">{emotion}</span>
                           <span className="text-gray-500">{Math.round(value * 100)}%</span>
