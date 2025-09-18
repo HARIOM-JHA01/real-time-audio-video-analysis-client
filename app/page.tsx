@@ -486,10 +486,10 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Current Emotion Bars - always show all 6 */}
+                {/* Current Emotion Bars - always show all 8 */}
                 <div className="space-y-3">
                   <h3 className="text-lg font-semibold text-gray-800">Emotion Levels</h3>
-                  {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion, emotionIndex) => {
+                  {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus', 'angry', 'neutral'].map((emotion, emotionIndex) => {
                     const value = emotionHistory[emotionHistory.length - 1]?.emotions?.[emotion] ?? 0;
                     return (
                       <div key={emotionIndex} className="space-y-1">
@@ -506,7 +506,9 @@ export default function Home() {
                               emotion === 'calmness' ? 'bg-green-400' :
                               emotion === 'stress' ? 'bg-red-400' :
                               emotion === 'focus' ? 'bg-purple-400' :
-                              'bg-gray-400'
+                              emotion === 'angry' ? 'bg-rose-600' :
+                              emotion === 'neutral' ? 'bg-gray-400' :
+                              'bg-gray-300'
                             }`}
                             style={{ width: `${value * 100}%` }}
                           ></div>
@@ -567,7 +569,7 @@ export default function Home() {
                     ))}
                     
                     {/* Emotion lines */}
-                    {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion, emotionIndex) => {
+                    {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion) => {
                       const color = {
                         happiness: '#fbbf24',
                         sadness: '#60a5fa',

@@ -133,17 +133,16 @@ export const useWebSpeechAPI = (): UseWebSpeechAPIReturn => {
         };
 
         recognition.onerror = (event: any) => {
+            if (event.error === 'no-speech') {
+                // Only log as info, do not treat as error
+                console.info('ℹ️ No speech detected, continuing to listen...');
+                return;
+            }
             console.error('❌ Speech recognition error:', event.error);
             
             // Handle different error types more gracefully
             let errorMessage = '';
             switch (event.error) {
-                case 'no-speech':
-                    // This is not really an error - just no speech detected
-                    console.log('ℹ️ No speech detected, continuing to listen...');
-                    // Don't show this as an error to the user, just log it
-                    return; // Don't set error state for no-speech
-                    
                 case 'audio-capture':
                     errorMessage = 'Microphone access denied or not available';
                     break;

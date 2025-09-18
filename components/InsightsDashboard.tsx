@@ -274,7 +274,7 @@ export default function InsightsDashboard({
                     ))}
                     
                     {/* Emotion lines */}
-                    {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion, emotionIndex) => {
+                    {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion) => {
                       const color = 
                         emotion === 'happiness' ? '#fbbf24' :
                         emotion === 'sadness' ? '#60a5fa' :
