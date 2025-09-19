@@ -545,7 +545,7 @@ export default function Home() {
               {speechResults.length > 0 && (
                 <div className="mt-2">
                   <div className="font-semibold text-gray-700">Last Result:</div>
-                  <div className="text-gray-600 italic">"{speechResults[speechResults.length - 1]?.text}"</div>
+                  <div className="text-gray-600 italic">&quot;{speechResults[speechResults.length - 1]?.text}&quot;</div>
                   <div className="text-gray-500">Final: {speechResults[speechResults.length - 1]?.isFinal ? '✅' : '❌'}</div>
                 </div>
               )}
