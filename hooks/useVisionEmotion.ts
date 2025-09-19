@@ -16,16 +16,26 @@ export function useVisionEmotion() {
     setIsLoading(true);
     setError(null);
     try {
+      console.log('Sending frame for vision analysis, image length:', base64Image.length);
       const response = await fetch('/api/vision-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64Image })
       });
-      if (!response.ok) throw new Error('Failed to analyze frame');
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Vision analysis failed with status ${response.status}:`, errorText);
+        throw new Error(`Failed to analyze frame: ${errorText}`);
+      }
+      
       const data = await response.json();
+      console.log('Vision analysis result:', data);
       return data.result as VisionEmotionResult;
     } catch (err) {
-      setError('Vision analysis failed');
+      const errorMessage = err instanceof Error ? err.message : 'Vision analysis failed';
+      console.error('Vision analysis error:', errorMessage);
+      setError(errorMessage);
       return null;
     } finally {
       setIsLoading(false);

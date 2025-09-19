@@ -64,10 +64,10 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
         // Try different configurations in order of preference
         const configs: { mimeType: string; options: MediaRecorderOptions }[] = [
           { mimeType: '', options: {} }, // Default first (most compatible)
-          { mimeType: 'audio/webm', options: {} },
-          { mimeType: 'audio/mp4', options: {} },
-          { mimeType: 'audio/ogg', options: {} },
-          { mimeType: 'audio/webm;codecs=opus', options: {} },
+          { mimeType: 'audio/webm', options: { audioBitsPerSecond: 128000 } },
+          { mimeType: 'audio/webm;codecs=opus', options: { audioBitsPerSecond: 128000 } },
+          { mimeType: 'audio/mp4', options: { audioBitsPerSecond: 128000 } },
+          { mimeType: 'audio/ogg', options: { audioBitsPerSecond: 128000 } },
         ];
 
         // Test each configuration by actually trying to start recording
@@ -150,18 +150,35 @@ export default function MediaCapture({ onAudioData, onVideoFrame, onStartCapture
 
           mediaRecorder.ondataavailable = (event: BlobEvent) => {
             if (event.data && event.data.size > 0) {
+              console.log('🎤 Audio chunk received, size:', event.data.size);
               audioChunks.push(event.data);
+              
+              // Send each chunk immediately for more responsive transcription
+              if (onAudioData) {
+                onAudioData(event.data);
+              }
             }
           };
 
           mediaRecorder.onstart = () => {
             console.log('✅ MediaRecorder started successfully');
-            // timer every 5s to combine chunks
+            // Request data more frequently for better real-time performance
+            try {
+              mediaRecorder.requestData();
+            } catch (e) {
+              console.warn('MediaRecorder requestData failed:', e);
+            }
+            
+            // timer every 1s to request more data
             audioChunkTimerRef.current = window.setInterval(() => {
               if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-                sendCollectedAudio();
+                try {
+                  mediaRecorderRef.current.requestData();
+                } catch (e) {
+                  console.warn('MediaRecorder requestData failed:', e);
+                }
               }
-            }, 5000);
+            }, 1000); // Reduced from 5000ms to 1000ms for more responsive transcription
           };
 
           mediaRecorder.onstop = () => {

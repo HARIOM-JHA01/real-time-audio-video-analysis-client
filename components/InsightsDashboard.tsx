@@ -23,6 +23,7 @@ interface EmotionHistory {
   timestamp: number;
   emotions: { [key: string]: number };
   mood: string;
+  source?: 'audio' | 'vision';
 }
 
 interface AIInsights {
@@ -159,11 +160,34 @@ export default function InsightsDashboard({
           </div>
 
           {transcriptions.length > 0 && (
-            <div className="mt-3 text-sm text-blue-700 flex items-center justify-between">
-              <span>Last updated: {formatTime(transcriptions[transcriptions.length - 1].timestamp)}</span>
-              <span className="bg-blue-100 px-2 py-1 rounded-full text-xs">
-                {transcriptions.length} transcription{transcriptions.length !== 1 ? 's' : ''}
-              </span>
+            <div className="mt-3 text-sm text-blue-700">
+              <div className="flex items-center justify-between">
+                <span>Last updated: {formatTime(transcriptions[transcriptions.length - 1].timestamp)}</span>
+                <span className="bg-blue-100 px-2 py-1 rounded-full text-xs">
+                  {transcriptions.length} transcription{transcriptions.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {/* Show confidence and language if available */}
+              {transcriptions[transcriptions.length - 1] && (
+                <div className="flex items-center gap-4 mt-2 text-xs">
+                  {transcriptions[transcriptions.length - 1].confidence && (
+                    <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                      {Math.round(transcriptions[transcriptions.length - 1].confidence * 100)}% confidence
+                    </span>
+                  )}
+                  {transcriptions[transcriptions.length - 1].language && (
+                    <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">
+                      {transcriptions[transcriptions.length - 1].language}
+                    </span>
+                  )}
+                  {transcriptions[transcriptions.length - 1].detectedLanguage && 
+                   transcriptions[transcriptions.length - 1].detectedLanguage !== transcriptions[transcriptions.length - 1].language && (
+                    <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
+                      Detected: {transcriptions[transcriptions.length - 1].detectedLanguage}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -219,43 +243,54 @@ export default function InsightsDashboard({
 
           {emotionHistory.length > 0 ? (
             <div className="space-y-4">
-              {/* Current Emotions */}
+              {/* Current Emotions (show source) */}
               <div className="bg-white/70 rounded-lg p-4 border border-rose-200">
                 <h4 className="text-sm font-medium text-rose-800 mb-3">Current Emotional State</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {Object.entries(emotionHistory[emotionHistory.length - 1]?.emotions || {}).map(([emotion, value]) => (
-                    <div key={emotion} className="text-center">
-                      <div className="text-2xl mb-1">
-                        {emotion === 'happiness' && '😊'}
-                        {emotion === 'sadness' && '😔'}
-                        {emotion === 'excitement' && '🎉'}
-                        {emotion === 'calmness' && '😌'}
-                        {emotion === 'stress' && '😰'}
-                        {emotion === 'focus' && '🧠'}
-                        {emotion === 'neutral' && '😐'}
+                <div className="flex flex-wrap gap-4">
+                  {['audio', 'vision'].map((source) => {
+                    const lastEntry = [...emotionHistory].reverse().find(e => e.source === source);
+                    if (!lastEntry) return null;
+                    return (
+                      <div key={source} className="flex-1 min-w-[120px]">
+                        <div className="text-xs font-semibold text-gray-500 mb-1 capitalize">{source === 'audio' ? 'Transcription' : 'Vision'}</div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {Object.entries(lastEntry.emotions || {}).map(([emotion, value]) => (
+                            <div key={emotion} className="text-center">
+                              <div className="text-2xl mb-1">
+                                {emotion === 'happiness' && '😊'}
+                                {emotion === 'sadness' && '😔'}
+                                {emotion === 'excitement' && '🎉'}
+                                {emotion === 'calmness' && '😌'}
+                                {emotion === 'stress' && '😰'}
+                                {emotion === 'focus' && '🧠'}
+                                {emotion === 'neutral' && '😐'}
+                              </div>
+                              <div className="text-xs font-medium text-gray-700 capitalize mb-1">{emotion}</div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className={`h-2 rounded-full transition-all duration-500 ${
+                                    emotion === 'happiness' ? 'bg-yellow-400' :
+                                    emotion === 'sadness' ? 'bg-blue-400' :
+                                    emotion === 'excitement' ? 'bg-orange-400' :
+                                    emotion === 'calmness' ? 'bg-green-400' :
+                                    emotion === 'stress' ? 'bg-red-400' :
+                                    emotion === 'focus' ? 'bg-purple-400' :
+                                    'bg-gray-400'
+                                  }`}
+                                  style={{ width: `${Math.round((value || 0) * 100)}%` }}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-gray-600 mt-1">{Math.round((value || 0) * 100)}%</div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="text-xs font-medium text-gray-700 capitalize mb-1">{emotion}</div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all duration-500 ${
-                            emotion === 'happiness' ? 'bg-yellow-400' :
-                            emotion === 'sadness' ? 'bg-blue-400' :
-                            emotion === 'excitement' ? 'bg-orange-400' :
-                            emotion === 'calmness' ? 'bg-green-400' :
-                            emotion === 'stress' ? 'bg-red-400' :
-                            emotion === 'focus' ? 'bg-purple-400' :
-                            'bg-gray-400'
-                          }`}
-                          style={{ width: `${Math.round((value || 0) * 100)}%` }}
-                        ></div>
-                      </div>
-                      <div className="text-xs text-gray-600 mt-1">{Math.round((value || 0) * 100)}%</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Emotion Timeline Graph */}
+              {/* Emotion Timeline Graph (color by source) */}
               <div className="bg-white/70 rounded-lg p-4 border border-rose-200">
                 <h4 className="text-sm font-medium text-rose-800 mb-3">Emotion Timeline</h4>
                 <div className="relative h-48 overflow-hidden">
@@ -272,37 +307,36 @@ export default function InsightsDashboard({
                         strokeWidth="1"
                       />
                     ))}
-                    
-                    {/* Emotion lines */}
-                    {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion) => {
-                      const color = 
-                        emotion === 'happiness' ? '#fbbf24' :
-                        emotion === 'sadness' ? '#60a5fa' :
-                        emotion === 'excitement' ? '#fb923c' :
-                        emotion === 'calmness' ? '#4ade80' :
-                        emotion === 'stress' ? '#f87171' :
-                        '#a855f7';
-                      
-                      const points = emotionHistory.slice(-20).map((entry, index) => {
-                        const x = (index / Math.max(emotionHistory.slice(-20).length - 1, 1)) * 400;
-                        const y = 180 - (entry.emotions[emotion] || 0) * 180;
-                        return `${x},${y}`;
-                      }).join(' ');
-
-                      return (
-                        <polyline
-                          key={emotion}
-                          points={points}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth="2"
-                          opacity="0.8"
-                        />
-                      );
-                    })}
+                    {/* Emotion lines for each source */}
+                    {['audio', 'vision'].map((source, sIdx) => (
+                      ['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion) => {
+                        const color =
+                          emotion === 'happiness' ? (source === 'audio' ? '#fbbf24' : '#fde68a') :
+                          emotion === 'sadness' ? (source === 'audio' ? '#60a5fa' : '#bae6fd') :
+                          emotion === 'excitement' ? (source === 'audio' ? '#fb923c' : '#fca5a5') :
+                          emotion === 'calmness' ? (source === 'audio' ? '#4ade80' : '#bbf7d0') :
+                          emotion === 'stress' ? (source === 'audio' ? '#f87171' : '#fecaca') :
+                          '#a855f7';
+                        const filtered = emotionHistory.slice(-20).filter(e => e.source === source);
+                        const points = filtered.map((entry, index) => {
+                          const x = (index / Math.max(filtered.length - 1, 1)) * 400;
+                          const y = 180 - (entry.emotions[emotion] || 0) * 180;
+                          return `${x},${y}`;
+                        }).join(' ');
+                        return (
+                          <polyline
+                            key={source + '-' + emotion}
+                            points={points}
+                            fill="none"
+                            stroke={color}
+                            strokeWidth="2"
+                            opacity={source === 'audio' ? 0.9 : 0.5}
+                          />
+                        );
+                      })
+                    ))}
                   </svg>
                 </div>
-
                 {/* Legend */}
                 <div className="flex flex-wrap gap-2 mt-3 text-xs">
                   {['happiness', 'sadness', 'excitement', 'calmness', 'stress', 'focus'].map((emotion) => (
@@ -322,6 +356,12 @@ export default function InsightsDashboard({
                       <span className="capitalize text-gray-700">{emotion}</span>
                     </div>
                   ))}
+                  <div className="flex items-center gap-1 ml-4">
+                    <span className="w-3 h-3 rounded-full bg-black opacity-90"></span>
+                    <span className="text-xs text-gray-700">Audio</span>
+                    <span className="w-3 h-3 rounded-full bg-black opacity-50 ml-2"></span>
+                    <span className="text-xs text-gray-700">Vision</span>
+                  </div>
                 </div>
               </div>
             </div>

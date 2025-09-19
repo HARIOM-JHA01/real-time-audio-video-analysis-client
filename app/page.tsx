@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { useVisionEmotion } from '@/hooks/useVisionEmotion';
 import MediaCapture from '@/components/MediaCapture';
+import InsightsDashboard from '@/components/InsightsDashboard';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useWebSpeechAPI } from '@/hooks/useWebSpeechAPI';
 import { useAIInsights } from '@/hooks/useAIInsights';
+import { useDeepgramTranscription } from '@/hooks/useDeepgramTranscription';
 import Image from 'next/image';
 
 interface Transcription {
@@ -82,6 +85,9 @@ export default function Home() {
     speechCoach?: SpeechCoachResult;
     translation?: TranslationResult;
   }>({});
+
+  // Vision emotion analysis
+  const { analyzeFrame: analyzeVisionFrame } = useVisionEmotion();
 
   // Smart WebSocket URL selection
   const getWebSocketUrl = () => {
@@ -350,9 +356,41 @@ export default function Home() {
     // We're using Web Speech API instead of sending audio to server
   }, []);
 
-  const handleVideoFrame = useCallback((frameData: string) => {
+  const handleVideoFrame = useCallback(async (frameData: string) => {
     sendVideoFrame(frameData);
-  }, [sendVideoFrame]);
+    // Also run vision-based emotion analysis
+    // Remove data URL prefix if present
+    const base64Image = frameData.startsWith('data:image') ? frameData.split(',')[1] : frameData;
+    try {
+      const visionResult = await analyzeVisionFrame(base64Image);
+      if (visionResult) {
+        // Add to emotion history
+        setEmotionHistory(prev => [
+          ...prev.slice(-19),
+          {
+            timestamp: Date.now(),
+            emotions: visionResult.emotions || {},
+            mood: visionResult.mood || 'neutral',
+            source: 'vision'
+          }
+        ]);
+        // Add to video analyses
+        setVideoAnalyses(prev => [
+          ...prev,
+          {
+            description: visionResult.description,
+            timestamp: Date.now(),
+            objects: visionResult.objects,
+            scene: visionResult.scene,
+            emotions: visionResult.emotions,
+            mood: visionResult.mood
+          }
+        ]);
+      }
+    } catch (err) {
+      console.error('Vision emotion analysis failed:', err);
+    }
+  }, [sendVideoFrame, analyzeVisionFrame]);
 
   // Start/stop capture handlers
   const handleStartCapture = useCallback(() => {
@@ -629,252 +667,15 @@ export default function Home() {
           )}
         </div>
 
-        {/* Multiple AI Insights */}
-        <div className="space-y-6">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="p-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl">
-              <div className="text-2xl">🤖</div>
-            </div>
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900">AI Insights</h2>
-              <p className="text-gray-600">Multiple intelligence analysis streams</p>
-            </div>
-          </div>
-
-          {/* AI Insights Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            
-            {/* Sentiment Analysis */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-gradient-to-r from-green-400 to-blue-500 rounded-lg">
-                  <div className="text-lg">💭</div>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-800">Sentiment Analysis</h3>
-              </div>
-              {aiInsights.sentiment ? (
-                <div className="space-y-3">
-                  <div className={`px-3 py-2 rounded-full text-sm font-medium ${
-                    aiInsights.sentiment.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
-                    aiInsights.sentiment.sentiment === 'negative' ? 'bg-red-100 text-red-700' :
-                    'bg-gray-100 text-gray-700'
-                  }`}>
-                    {aiInsights.sentiment.sentiment === 'positive' ? '😊 Positive' :
-                     aiInsights.sentiment.sentiment === 'negative' ? '😔 Negative' :
-                     '😐 Neutral'}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    Confidence: {Math.round(aiInsights.sentiment.confidence * 100)}%
-                  </div>
-                  <div className="text-sm text-gray-700">
-                    {aiInsights.sentiment.reasoning}
-                  </div>
-                  {aiInsights.sentiment.emotions && aiInsights.sentiment.emotions.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {aiInsights.sentiment.emotions.map((emotion, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
-                          {emotion}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center text-gray-500 py-4">
-                  <div className="text-2xl mb-2">�</div>
-                  <p className="text-sm">Waiting for speech...</p>
-                </div>
-              )}
-            </div>
-
-            {/* Keywords Extraction */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg">
-                  <div className="text-lg">🔑</div>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-800">Key Topics</h3>
-              </div>
-              {aiInsights.keywords ? (
-                <div className="space-y-3">
-                  <div className={`px-3 py-2 rounded-full text-sm font-medium ${
-                    aiInsights.keywords.urgency === 'high' ? 'bg-red-100 text-red-700' :
-                    aiInsights.keywords.urgency === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-green-100 text-green-700'
-                  }`}>
-                    {aiInsights.keywords.urgency === 'high' ? '🔴 High Priority' :
-                     aiInsights.keywords.urgency === 'medium' ? '🟡 Medium Priority' :
-                     '🟢 Low Priority'}
-                  </div>
-                  
-                  {aiInsights.keywords.keywords && aiInsights.keywords.keywords.length > 0 && (
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Keywords:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {aiInsights.keywords.keywords.slice(0, 6).map((keyword, idx) => (
-                          <span key={idx} className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full">
-                            {keyword}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {aiInsights.keywords.categories && (
-                    <div className="space-y-2">
-                      {Object.entries(aiInsights.keywords.categories).map(([category, items]) => 
-                        items.length > 0 && (
-                          <div key={category}>
-                            <p className="text-xs text-gray-500 capitalize">{category}:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {items.slice(0, 3).map((item, idx) => (
-                                <span key={idx} className="px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-full">
-                                  {item}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center text-gray-500 py-4">
-                  <div className="text-2xl mb-2">🔄</div>
-                  <p className="text-sm">Analyzing topics...</p>
-                </div>
-              )}
-            </div>
-
-            {/* Translation (if available) */}
-            {aiInsights.translation && (
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-gradient-to-r from-blue-400 to-purple-500 rounded-lg">
-                    <div className="text-lg">🌐</div>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-800">Translation</h3>
-                </div>
-                <div className="space-y-3">
-                  <div className="text-sm">
-                    <span className="text-gray-500">From:</span> {aiInsights.translation.sourceLanguage}
-                  </div>
-                  <div className="text-sm">
-                    <span className="text-gray-500">To:</span> {aiInsights.translation.targetLanguage}
-                  </div>
-                  <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-800">
-                    {aiInsights.translation.translatedText}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    Confidence: {Math.round(aiInsights.translation.confidence * 100)}%
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Video Analysis Summary */}
-            {videoAnalyses.length > 0 && (
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-gradient-to-r from-pink-400 to-red-500 rounded-lg">
-                    <div className="text-lg">👁️</div>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-800">Visual Analysis</h3>
-                </div>
-                <div className="space-y-3">
-                  <div className="text-sm text-gray-700 leading-relaxed max-h-32 overflow-y-auto">
-                    {videoAnalyses[videoAnalyses.length - 1]?.description}
-                  </div>
-                  {videoAnalyses[videoAnalyses.length - 1]?.objects && (
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Objects detected:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {videoAnalyses[videoAnalyses.length - 1].objects.slice(0, 4).map((obj, idx) => (
-                          <span key={idx} className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">
-                            {obj}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {videoAnalyses[videoAnalyses.length - 1]?.scene && (
-                    <div className="text-sm">
-                      <span className="text-gray-500">Scene:</span> {videoAnalyses[videoAnalyses.length - 1].scene}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Transcription Summary */}
-            {transcriptions.length > 0 && (
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-gradient-to-r from-teal-400 to-green-500 rounded-lg">
-                    <div className="text-lg">🎤</div>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-800">Speech Summary</h3>
-                </div>
-                <div className="space-y-3">
-                  <div className="text-sm text-gray-500">
-                    Total transcriptions: {transcriptions.length}
-                  </div>
-                  {transcriptions.length > 0 && (
-                    <div className="bg-teal-50 rounded-lg p-3 text-sm text-teal-800 leading-relaxed max-h-32 overflow-y-auto">
-                      {transcriptions[transcriptions.length - 1]?.text}
-                    </div>
-                  )}
-                  <div className="text-xs text-gray-500">
-                    Last updated: {new Date(transcriptions[transcriptions.length - 1]?.timestamp || Date.now()).toLocaleTimeString()}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Connection Status */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-lg">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-gradient-to-r from-gray-400 to-slate-500 rounded-lg">
-                  <div className="text-lg">📡</div>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-800">System Status</h3>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">WebSocket:</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    isConnected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}>
-                    {isConnected ? 'Connected' : 'Disconnected'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Speech API:</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    isSupported ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}>
-                    {isSupported ? 'Ready' : 'Unavailable'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Listening:</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    isListening ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {isListening ? 'Active' : 'Idle'}
-                  </span>
-                </div>
-                {aiLoading && (
-                  <div className="flex items-center gap-2 text-sm text-blue-600">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
-                    <span>AI Processing...</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* AI Insights Dashboard */}
+        <InsightsDashboard
+          transcriptions={transcriptions}
+          videoAnalyses={videoAnalyses}
+          emotionHistory={emotionHistory}
+          isConnected={isConnected}
+          aiInsights={aiInsights}
+          aiLoading={aiLoading}
+        />
       </div>
     </div>
   );
