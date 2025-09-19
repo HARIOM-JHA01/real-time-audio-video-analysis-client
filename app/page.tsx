@@ -7,7 +7,6 @@ import InsightsDashboard from '@/components/InsightsDashboard';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useWebSpeechAPI } from '@/hooks/useWebSpeechAPI';
 import { useAIInsights } from '@/hooks/useAIInsights';
-import { useDeepgramTranscription } from '@/hooks/useDeepgramTranscription';
 import Image from 'next/image';
 
 interface Transcription {
@@ -119,6 +118,7 @@ export default function Home() {
     startListening,
     stopListening,
     isSupported,
+    error: speechError,
     results: speechResults,
     currentLanguage,
     setLanguage
@@ -135,15 +135,18 @@ export default function Home() {
     console.log('🔄 App state update:', {
       transcriptionsCount: transcriptions.length,
       videoAnalysesCount: videoAnalyses.length,
+      speechResultsCount: speechResults.length,
       isConnected,
       isCapturing,
       isListening,
       speechSupported: isSupported,
+      speechError: speechError,
+      currentLanguage,
       messagesCount: messages.length,
       aiInsightsKeys: Object.keys(aiInsights),
       hasAIInsights: Object.keys(aiInsights).length > 0
     });
-  }, [transcriptions, videoAnalyses, isConnected, isCapturing, isListening, isSupported, messages, aiInsights]);
+  }, [transcriptions, videoAnalyses, speechResults, isConnected, isCapturing, isListening, isSupported, speechError, currentLanguage, messages, aiInsights]);
 
   // Extract emotions from text using keyword analysis
   const extractEmotionsFromText = useCallback((text: string): { [key: string]: number } => {
@@ -254,9 +257,19 @@ export default function Home() {
 
   // Handle speech recognition results with AI analysis
   useEffect(() => {
-    speechResults.forEach(async result => {
-      if (result.isFinal) {
-        console.log('🎤 Final transcription:', result);
+    console.log('🎤 Processing speech results:', speechResults.length, 'total results');
+    
+    speechResults.forEach(async (result, index) => {
+      console.log(`🎤 Processing result ${index}:`, {
+        text: result.text,
+        isFinal: result.isFinal,
+        confidence: result.confidence,
+        timestamp: result.timestamp
+      });
+
+      // Process both interim and final results for better responsiveness
+      if (result.text && result.text.trim().length > 2) {
+        console.log('🎤 Adding transcription:', result.isFinal ? 'FINAL' : 'INTERIM');
 
         // Add transcription to state
         setTranscriptions(prev => {
@@ -268,25 +281,46 @@ export default function Home() {
             detectedLanguage: result.detectedLanguage
           };
 
-          // Avoid duplicates
-          const exists = prev.some(t =>
-            t.text === newTranscription.text &&
-            Math.abs(t.timestamp - newTranscription.timestamp) < 1000
-          );
+          // For interim results, replace the last interim result if it exists
+          if (!result.isFinal) {
+            const newResults = [...prev];
+            const lastIndex = newResults.length - 1;
 
-          if (!exists) {
-            console.log('🎤 Adding new transcription to state');
-
-            // Trigger AI analysis for meaningful text
-            if (result.text.trim().length > 5) {  // Reduced from 20 for testing
-              performAIAnalysis(result.text.trim(), result.language);
+            // If the last result was also interim (no confidence usually means interim)
+            if (lastIndex >= 0 && (!newResults[lastIndex].confidence || newResults[lastIndex].confidence < 0.95)) {
+              console.log('🎤 Replacing last interim result');
+              newResults[lastIndex] = newTranscription;
+              return newResults;
+            } else {
+              console.log('🎤 Adding new interim result');
+              return [...prev, newTranscription];
             }
+          } else {
+            // For final results, avoid duplicates but add new ones
+            const exists = prev.some(t =>
+              t.text === newTranscription.text &&
+              Math.abs(t.timestamp - newTranscription.timestamp) < 2000
+            );
 
-            return [...prev, newTranscription];
+            if (!exists) {
+              console.log('🎤 Adding new FINAL transcription to state');
+
+              // Trigger AI analysis for meaningful final text
+              if (result.text.trim().length > 3) {
+                console.log('🎤 Triggering AI analysis for:', result.text.trim());
+                performAIAnalysis(result.text.trim(), result.language);
+              }
+
+              return [...prev, newTranscription];
+            } else {
+              console.log('🎤 Duplicate final result, skipping');
+            }
           }
 
           return prev;
         });
+      } else {
+        console.log('🎤 Skipping empty or too short result:', result.text);
       }
     });
   }, [speechResults, performAIAnalysis]);
@@ -394,13 +428,19 @@ export default function Home() {
 
   // Start/stop capture handlers
   const handleStartCapture = useCallback(() => {
+    console.log('🎥 Starting capture...', { isSupported, speechError });
     setIsCapturing(true);
-    if (isSupported) {
+    
+    if (isSupported && !speechError) {
+      console.log('🎤 Starting speech recognition...');
       startListening();
+    } else {
+      console.warn('⚠️ Speech recognition not available:', { isSupported, speechError });
     }
-  }, [isSupported, startListening]);
+  }, [isSupported, speechError, startListening]);
 
   const handleStopCapture = useCallback(() => {
+    console.log('🛑 Stopping capture...');
     setIsCapturing(false);
     stopListening();
   }, [stopListening]);
@@ -446,14 +486,35 @@ export default function Home() {
               {isConnected ? 'Connected' : 'Disconnected'}
             </div>
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-              isSupported 
+              isSupported && !speechError
                 ? 'bg-blue-100 text-blue-700 border border-blue-200' 
                 : 'bg-yellow-100 text-yellow-700 border border-yellow-200'
             }`}>
-              <span className={`w-2 h-2 rounded-full ${isSupported ? 'bg-blue-500' : 'bg-yellow-500'}`}></span>
-              Speech {isSupported ? 'Ready' : 'Unavailable'}
+              <span className={`w-2 h-2 rounded-full ${isSupported && !speechError ? 'bg-blue-500' : 'bg-yellow-500'}`}></span>
+              {speechError ? 'Speech Error' : isSupported ? 'Speech Ready' : 'Speech Unavailable'}
             </div>
           </div>
+
+          {/* Error Messages */}
+          {speechError && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center gap-2 text-red-700">
+                <span className="text-sm">⚠️</span>
+                <span className="text-sm font-medium">Speech Recognition Error:</span>
+              </div>
+              <p className="text-sm text-red-600 mt-1">{speechError}</p>
+              <button
+                onClick={() => {
+                  console.log('🔄 Retrying speech recognition...');
+                  stopListening();
+                  setTimeout(() => startListening(), 500);
+                }}
+                className="mt-2 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs rounded-md transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
           {/* Language Selector */}
           <div className="flex items-center justify-center gap-4 mt-4">
@@ -468,6 +529,28 @@ export default function Home() {
               <option value="es-MX">🇲🇽 Español (México)</option>
             </select>
           </div>
+
+          {/* Debug Panel for Speech Recognition */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs">
+              <div className="font-semibold text-gray-700 mb-2">🐛 Debug Info:</div>
+              <div className="grid grid-cols-2 gap-2 text-gray-600">
+                <div>Speech Results: {speechResults.length}</div>
+                <div>Transcriptions: {transcriptions.length}</div>
+                <div>Is Listening: {isListening ? '✅' : '❌'}</div>
+                <div>Is Supported: {isSupported ? '✅' : '❌'}</div>
+                <div>Error: {speechError || 'None'}</div>
+                <div>Language: {currentLanguage}</div>
+              </div>
+              {speechResults.length > 0 && (
+                <div className="mt-2">
+                  <div className="font-semibold text-gray-700">Last Result:</div>
+                  <div className="text-gray-600 italic">"{speechResults[speechResults.length - 1]?.text}"</div>
+                  <div className="text-gray-500">Final: {speechResults[speechResults.length - 1]?.isFinal ? '✅' : '❌'}</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Media Capture and Analysis Section */}

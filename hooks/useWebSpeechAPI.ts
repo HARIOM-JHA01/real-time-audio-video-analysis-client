@@ -68,13 +68,25 @@ export const useWebSpeechAPI = (): UseWebSpeechAPIReturn => {
 
     const recognitionRef = useRef<any>(null);
 
-    // Check for browser support
+    // Check for browser support and microphone permissions
     useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (SpeechRecognition) {
             setIsSupported(true);
             console.log('✅ Web Speech API is supported');
+            
+            // Check microphone permissions
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(() => {
+                        console.log('✅ Microphone access granted');
+                    })
+                    .catch((err) => {
+                        console.warn('⚠️ Microphone access denied or unavailable:', err);
+                        setError('Microphone access is required for speech recognition');
+                    });
+            }
         } else {
             setIsSupported(false);
             console.log('❌ Web Speech API is not supported in this browser');
@@ -124,7 +136,9 @@ export const useWebSpeechAPI = (): UseWebSpeechAPIReturn => {
                 console.log('🔄 Auto-restarting speech recognition...');
                 setTimeout(() => {
                     try {
-                        recognition.start();
+                        if (recognitionRef.current && recognitionRef.current.readyState !== 1) { // 1 = CONNECTING
+                            recognition.start();
+                        }
                     } catch (e) {
                         console.log('⚠️ Could not auto-restart recognition:', e);
                     }
@@ -219,9 +233,16 @@ export const useWebSpeechAPI = (): UseWebSpeechAPIReturn => {
         const langToUse = language || currentLanguage;
 
         if (!isSupported) {
-            setError('Speech recognition not supported');
+            setError('Speech recognition not supported in this browser');
+            console.error('❌ Speech recognition not supported');
             return;
         }
+
+        console.log('🎤 Attempting to start speech recognition...', {
+            language: langToUse,
+            isSupported,
+            currentError: error
+        });
 
         // Clear any previous errors
         setError(null);
@@ -229,25 +250,36 @@ export const useWebSpeechAPI = (): UseWebSpeechAPIReturn => {
         try {
             // Stop any existing recognition
             if (recognitionRef.current) {
+                console.log('🛑 Stopping existing recognition...');
                 recognitionRef.current.stop();
                 recognitionRef.current = null;
             }
 
             // Small delay to ensure previous recognition is fully stopped
             setTimeout(() => {
-                recognitionRef.current = initializeRecognition(langToUse);
+                try {
+                    console.log('🔄 Initializing new recognition...');
+                    recognitionRef.current = initializeRecognition(langToUse);
 
-                if (recognitionRef.current) {
-                    recognitionRef.current.start();
-                    console.log('🎤 Starting speech recognition in', langToUse);
-                    setCurrentLanguage(langToUse);
+                    if (recognitionRef.current) {
+                        console.log('🎤 Starting speech recognition in', langToUse);
+                        recognitionRef.current.start();
+                        setCurrentLanguage(langToUse);
+                        console.log('✅ Speech recognition started successfully');
+                    } else {
+                        console.error('❌ Failed to initialize recognition');
+                        setError('Failed to initialize speech recognition');
+                    }
+                } catch (innerErr) {
+                    console.error('❌ Error in delayed start:', innerErr);
+                    setError('Failed to start speech recognition. Please try again.');
                 }
-            }, 100);
+            }, 150); // Increased delay
         } catch (err) {
             console.error('❌ Error starting speech recognition:', err);
             setError('Failed to start speech recognition. Please check microphone permissions.');
         }
-    }, [isSupported, initializeRecognition, currentLanguage]);
+    }, [isSupported, initializeRecognition, currentLanguage, error]);
 
     const stopListening = useCallback(() => {
         if (recognitionRef.current) {
