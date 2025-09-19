@@ -29,7 +29,7 @@ export function useTranscription() {
 
                     console.log('🎤 Sending audio to REST API, size:', audioBlob.size, 'bytes');
 
-                    const response = await fetch('http://localhost:4000/transcribe', {
+                    const response = await fetch('https://localhost:4000/transcribe', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',

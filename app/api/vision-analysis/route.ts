@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Image is required' }, { status: 400 });
     }
     // Forward to backend server (adjust port/path as needed)
-    const backendRes = await fetch('http://localhost:15002/vision-analysis', {
+    const backendRes = await fetch('https://localhost:15002/vision-analysis', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base64Image })
